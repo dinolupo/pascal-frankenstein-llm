@@ -1,0 +1,23 @@
+# Local reference checkouts; they are documented by URL, not vendored here.
+ds4/
+q36/
+
+# Model weights and companion projects must remain outside Git.
+*.gguf
+*.safetensors
+*.bin
+
+# Local builds, caches, and editor/OS state.
+build/
+build-*/
+cmake-build-*/
+.cache/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Scratch material and local configuration.
+scratch/
+tmp/
+.env
+.wslconfig

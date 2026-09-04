@@ -1,0 +1,207 @@
+# Pascal Frankenstein LLM
+
+A personal local-LLM inference and hardware-adaptation project for my old rig:
+Intel i7-4790K with a GTX 1080 Ti (11 GB) and a GTX 1070 (8 GB).
+The aim is practical, reproducible inference—not a new inference engine.
+
+The work starts from [llama.cpp](https://github.com/ggml-org/llama.cpp) and,
+for the MoE experiments, from the `perf` branch of
+[thecodacus/llama.cpp](https://github.com/thecodacus/llama.cpp), initially at
+branch `perf`, commit `d927e7dc1`. This file documents what was needed to make that fork useful on
+two unequal Pascal GPUs with no CUDA peer-to-peer access.
+
+## Scope and disclosure
+
+This repository is a record of local integration, code adaptation, measurement,
+and debugging. It does **not** claim authorship of llama.cpp, GGML, the MoE
+expert-cache design, or multi-GPU inference in general. I want to thank
+Salvatore Sanfilippo aka `antirez` for his great passion, `thecodacus` and all
+the contributors of open source community.
+We are living in an amazing time, and with the help of AI I hope the world
+will be a better place.
+
+`thecodacus` created the `perf`-branch MoE work: routing traces, hot/cold
+expert caching, CPU/GPU overlap, and its speculative-decoding path. The local
+change described here places each hot-expert cache pack on the GPU that owns
+the corresponding model layers and adds independent cache-slot counts per GPU.
+
+The experiments, implementation, and documentation were developed with
+substantial assistance from ChatGPT/Codex. The human operator set the hardware
+constraints, selected the experiments, ran and validated them, and decided
+which results were retained.
+
+## Development hardware and constraints
+
+| Component | Configuration |
+| --- | --- |
+| Host hardware | Intel i7-4790K (AVX2), 32 GB DDR3 |
+| Development environment | Ubuntu 24.04.1 under WSL2; 24 GB RAM + 4 GB swap allocated to WSL |
+| CUDA0 | GTX 1080 Ti, 11 GB, Pascal `sm_61` |
+| CUDA1 | GTX 1070, 8 GB, Pascal `sm_61` |
+| CUDA / driver | CUDA Toolkit 12.9, Windows driver 581.80 |
+
+Pascal is not supported as a compilation target by CUDA 13, so the build stays
+on CUDA 12.9. CUDA Graphs being disabled on this architecture is expected.
+
+WSL2 is the development environment, not a hardware property. Its memory limit
+was raised from 15 GB to 24 GB because the mmap-backed model and MoE expert
+weights need enough Linux page cache. At 15 GB, page-cache thrashing dominated
+the early MoE measurements; the full before/after record and `.wslconfig`
+setting are in `BASELINE_LOG.md`.
+
+The NVIDIA Control Panel power mode must be **Prefer maximum performance**.
+Without it, decode can fall to P5 clocks and invalidate measurements.
+
+## What works today
+
+### Dense chat and coding: Qwen3.8-27B
+
+The conservative daily-use profile is Qwen3.8-27B Q4_K_M, 16k context, one
+server slot, full GPU offload, automatic layer split, F16 KV cache, and Flash
+Attention. It is a performance baseline, not the target of the dual-GPU MoE
+adaptation.
+
+| Test | Allocated context | Prompt / prefill | Generation | Repetitions | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `llama-bench` synthetic `pp512` / `tg128` | synthetic | **176.15 ± 4.52 t/s** | **10.31 ± 0.60 t/s** | 3 | baseline benchmark |
+| `llama-server` coding request | 16k | **89.02 t/s** | **10.37 t/s** | 1 | correct response |
+
+```bash
+cd /home/dino/pascal-frankenstein-llm
+./llama.cpp/build-pascal-cuda/bin/llama-server \
+  -m /mnt/e/lmstudio-models/lmstudio-community/Qwen3.8-27B-GGUF/Qwen3.8-27B-Q4_K_M.gguf \
+  -c 16384 --parallel 1 -ngl 999 \
+  -ctk f16 -ctv f16 -fa on \
+  --host 127.0.0.1 --port 18080 --jinja --no-webui
+```
+
+A 32k configuration could be made to fit only with impractical performance, so
+16k is the recommended working context.
+
+### MoE performance experiment: Qwen3.6-35B-A3B MTP
+
+The fastest tested MoE profile uses the official Unsloth
+Qwen3.6-35B-A3B-MTP-UD Q4_K_M GGUF, `-ncmoe 33`, an asymmetric cache of
+`160,108`, and MTP with `n-max=2`.
+
+| Model / workload | Context | Cache / MTP | Prompt / prefill | Generation | Repetitions | Status |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| MTP-UD, short 128-token prompt | 64k capacity | `160,108`, MTP `n-max=2` | — | **30.13 ± 0.49 t/s** | 3 | operational benchmark |
+| MTP-UD, 60,132 real prompt tokens | 64k | `160,108`, MTP `n-max=2`, F16 KV | **132.8 t/s** | **25.5 t/s** | 1 | long-context validation |
+| Heretic, short smoke test | 64k capacity | `160,108`, no MTP | **44.2 t/s** | **19.1 t/s** | 1 | not a baseline |
+
+These are local measurements, not portable claims about llama.cpp or the
+upstream fork. The HTTP version of the current 64k profile still needs a
+replicated benchmark.
+
+```bash
+cd /home/dino/pascal-frankenstein-llm
+./llama.cpp/build-pascal-cuda/bin/llama-cli \
+  -m /home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf \
+  -c 65536 -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk f16 -ctv f16 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 160,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning off --temp 0 --seed 123
+```
+
+The 20 GB Heretic GGUF does not expose a compatible MTP context. Its single
+smoke test is included for completeness, not as a recommended baseline.
+
+## The local MoE cache adaptation
+
+The upstream fork uses a routing profile to keep frequently selected (“hot”)
+experts in GPU memory while “cold” experts remain available in system RAM. On
+this machine the original allocation chose the first GPU for every hot cache
+pack. That left CUDA1 executing its layer group without the corresponding hot
+experts and wasted its available VRAM.
+
+The local change in `src/llama-model.cpp`,
+`llama_model_base::init_moe_expert_cache()`, makes the cache follow the device
+already selected for each layer (`dev_layer[il]`). It also accepts a separate
+slot quota per device: `--moe-cache-slots 160,108` means 160 hot experts per
+cached CUDA0 layer and 108 per cached CUDA1 layer. It does not change routing,
+expert weights, or the cold-expert fallback.
+
+```mermaid
+flowchart LR
+  subgraph Before[Original placement on this machine]
+    R1["Layer routers"] --> H1["All hot cache packs"]
+    H1 --> G0a["CUDA0: GTX 1080 Ti"]
+    R1 --> C1["Cold experts in CPU/RAM"]
+    G1a["CUDA1: GTX 1070\nowns later layers"] -. no local hot cache .-> H1
+  end
+
+  subgraph After[Local per-device cache placement]
+    R2["Routers, layers 0–24"] --> H2["Hot cache, 160 slots"]
+    H2 --> G0b["CUDA0: GTX 1080 Ti\nlayers 0–24"]
+    R3["Routers, layers 25–39"] --> H3["Hot cache, 108 slots"]
+    H3 --> G1b["CUDA1: GTX 1070\nlayers 25–39"]
+    R2 --> C2["Cold experts remain in CPU/RAM"]
+    R3 --> C2
+  end
+```
+
+The first distributed-cache test established correct placement rather than a
+meaningful speedup: it showed cache packs and VRAM use on both GPUs. The useful
+result came from combining this placement with hybrid expert residency,
+asymmetric cache sizes, and the MTP model. All intermediate measurements,
+including failed configurations, are retained in the experiment log.
+
+### Build used for the measurements
+
+```bash
+cd /home/dino/pascal-frankenstein-llm/llama.cpp
+cmake -S . -B build-pascal-cuda -G Ninja \
+  -DGGML_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.9/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=61 \
+  -DGGML_NATIVE=ON \
+  -DLLAMA_BUILD_TESTS=OFF
+cmake --build build-pascal-cuda -j 4
+```
+
+`llama-cli` and `llama-server` use comma-separated tensor splits (`-ts 10,7`).
+In this fork's `llama-bench`, a slash keeps it a single configuration
+(`-ts 10/7`); using a comma starts two separate benchmark configurations.
+
+## Measurement rules and open work
+
+- Change one variable at a time. Use `r=1` only for screening and at least
+  `r=3` for a baseline.
+- Record model hash, fork commit, context actually populated, K/V type, batch,
+  cache/MTP settings, RAM/swap, and VRAM per GPU.
+- Do not include model-load time from `/mnt/e` in inference throughput.
+- Host registration (`cudaHostRegister`) is unsupported by the current WSL
+  CUDA path. Keep host registration and prefetch off in WSL; test that pair on
+  native Linux only.
+- Next work: quality and long-context validation, a replicated 64k HTTP MoE
+  run, then a measured 128k candidate. No performance gain is assumed before
+  measurement.
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are being translated to English. |
+| [BENCHMARK_QUALITA_E_CONTESTO.md](BENCHMARK_QUALITA_E_CONTESTO.md) | Quality and long-context validation protocol. |
+| [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
+| [AGENTS.md](AGENTS.md) | Local instructions for coding agents; not end-user documentation. |
+
+## Upstream work
+
+- [llama.cpp / GGML](https://github.com/ggml-org/llama.cpp): inference engine,
+  GGUF ecosystem, kernels, and multi-GPU support.
+- [thecodacus/llama.cpp](https://github.com/thecodacus/llama.cpp): `perf`
+  branch used as the MoE-cache baseline.
+- [antirez/ds4](https://github.com/antirez/ds4) and
+  [Ninnix/q36](https://github.com/Ninnix/q36): studied as reference projects;
+  they are not part of this project or its build.
+
+## License and model files
+
+This repository does not distribute model weights. Model files remain outside
+the repository. The modified llama.cpp fork retains its upstream license and
+attribution requirements; publish the local fork changes with the original
+license intact.
