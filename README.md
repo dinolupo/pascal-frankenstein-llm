@@ -149,6 +149,20 @@ result came from combining this placement with hybrid expert residency,
 asymmetric cache sizes, and the MTP model. All intermediate measurements,
 including failed configurations, are retained in the experiment log.
 
+## MoE glossary
+
+| Term | Meaning in this project |
+| --- | --- |
+| **MoE** | Mixture of Experts: the router selects only a small subset of expert networks for each token. |
+| **A3B** | About 3 billion active parameters per token; it does not mean the complete 35B model occupies 3B parameters of memory. |
+| **Expert** | One routed feed-forward subnetwork. “Hot” and “cold” describe where that expert is served from for a given cache profile, not an intrinsic expert property. |
+| **Routing profile** | A CSV produced by `llama-moe-trace` that counts routed expert IDs per layer over representative workloads. |
+| **Hot-expert cache** | A GPU copy of the frequently routed experts selected by the profile. Original expert weights remain available in CPU/RAM for cold requests. |
+| **`-ncmoe N`** | Keeps original experts for the first `N` MoE layers in CPU/RAM; later MoE layers keep all their experts in GPU memory. |
+| **MTP** | Multi-Token Prediction: the model proposes multiple future tokens, then verifies them with the main model. It can improve decode speed only when acceptance repays its overhead. |
+| **`pp512` / `tg128`** | Synthetic `llama-bench` prefill of 512 tokens / generation of 128 tokens. They are not equivalent to a real chat request. |
+| **`r=1` / `r=3`** | One repetition is screening only; three is the normal minimum for a reported baseline. |
+
 ### Build used for the measurements
 
 ```bash
@@ -184,10 +198,12 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 
 | Path | Purpose |
 | --- | --- |
-| [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are being translated to English. |
-| [BENCHMARK_QUALITA_E_CONTESTO.md](BENCHMARK_QUALITA_E_CONTESTO.md) | Quality and long-context validation protocol. |
+| [`llama.cpp/`](llama.cpp/) | Git submodule pinned to the local `pascal-dual-gpu-cache` fork commit. |
+| [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
+| [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
 | [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
 | [AGENTS.md](AGENTS.md) | Local instructions for coding agents; not end-user documentation. |
+| [LICENSE](LICENSE) | MIT license for this repository; the submodule retains its upstream license. |
 
 ## Upstream work
 
