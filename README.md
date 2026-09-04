@@ -221,3 +221,38 @@ This repository does not distribute model weights. Model files remain outside
 the repository. The modified llama.cpp fork retains its upstream license and
 attribution requirements; publish the local fork changes with the original
 license intact.
+
+## Prebuilt Linux releases
+
+Release assets are built from `dinolupo/llama.cpp` at the submodule commit
+pinned by this repository. For the first release, that is
+`b00c2d77e` (`pascal-dual-gpu-cache`), which is based on
+`thecodacus/llama.cpp` `perf` at `d927e7dc1`. In other words, the binary
+contains the local per-device cache changes; the upstream fork is its base,
+not the exact source tree being released.
+
+The planned asset name is:
+
+```text
+pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61.tar.gz
+```
+
+It will contain `llama-cli`, `llama-server`, `llama-bench`, `llama-moe-trace`,
+their required project shared libraries, build metadata, and `SHA256SUMS`. It
+will not contain GGUF model weights or NVIDIA libraries.
+
+The upstream build-version string printed by `--version` can still report
+`10125 (d927e7dc1)`. Consult `BUILD_INFO.txt` inside the release asset for the
+exact fork commit that produced the binaries.
+
+The release is for Linux x86_64 with a compatible NVIDIA driver, CUDA 12 runtime
+libraries, and a Pascal `sm_61` GPU. After extraction, launch programs with the
+packaged library directory visible:
+
+```bash
+export LD_LIBRARY_PATH="$PWD/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+./bin/llama-server --help
+```
+
+This is a manually built and tested hardware-specific release. It is not a
+generic binary distribution for every Linux, GPU, or CUDA version.

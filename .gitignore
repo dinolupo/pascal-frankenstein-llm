@@ -19,5 +19,6 @@ __pycache__/
 # Scratch material and local configuration.
 scratch/
 tmp/
+dist/
 .env
 .wslconfig
