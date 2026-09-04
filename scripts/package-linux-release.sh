@@ -81,6 +81,9 @@ done
 )
 
 tar -C "$stage_dir" -czf "$archive" "$package_name"
-sha256sum "$archive" > "${archive}.sha256"
+(
+    cd "$dist_dir"
+    sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256"
+)
 printf 'created %s\n' "$archive"
 printf 'created %s\n' "${archive}.sha256"
