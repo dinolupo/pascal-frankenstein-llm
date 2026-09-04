@@ -87,12 +87,14 @@ Qwen3.6-35B-A3B-MTP-UD Q4_K_M GGUF, `-ncmoe 33`, an asymmetric cache of
 | Model / workload | Context | Cache / MTP | Prompt / prefill | Generation | Repetitions | Status |
 | --- | ---: | --- | ---: | ---: | ---: | --- |
 | MTP-UD, short 128-token prompt | 64k capacity | `160,108`, MTP `n-max=2` | — | **30.13 ± 0.49 t/s** | 3 | operational benchmark |
-| MTP-UD, 60,132 real prompt tokens | 64k | `160,108`, MTP `n-max=2`, F16 KV | **132.8 t/s** | **25.5 t/s** | 1 | long-context validation |
+| MTP-UD, 60,132 real prompt tokens | 64k | `160,108`, MTP `n-max=2`, F16 KV | **132.8 t/s** | **25.5 t/s** | 1 | capacity and throughput check |
 | Heretic, short smoke test | 64k capacity | `160,108`, no MTP | **44.2 t/s** | **19.1 t/s** | 1 | not a baseline |
 
 These are local measurements, not portable claims about llama.cpp or the
-upstream fork. The HTTP version of the current 64k profile still needs a
-replicated benchmark.
+upstream fork. The 60,132-token run verifies that the configuration can fill
+most of a 64k context and remain operational at the reported throughput; it
+does not yet validate retrieval, reasoning, or answer quality at that length.
+The HTTP version of the current 64k profile still needs a replicated benchmark.
 
 ```bash
 cd /home/dino/pascal-frankenstein-llm
@@ -124,24 +126,34 @@ slot quota per device: `--moe-cache-slots 160,108` means 160 hot experts per
 cached CUDA0 layer and 108 per cached CUDA1 layer. It does not change routing,
 expert weights, or the cold-expert fallback.
 
+For each cached MoE layer, the router can select a mixture of hot and cold
+experts. The fork separates those expert IDs, evaluates the two paths, and
+combines their outputs:
+
 ```mermaid
 flowchart LR
-  subgraph Before[Original placement on this machine]
-    R1["Layer routers"] --> H1["All hot cache packs"]
-    H1 --> G0a["CUDA0: GTX 1080 Ti"]
-    R1 --> C1["Cold experts in CPU/RAM"]
-    G1a["CUDA1: GTX 1070\nowns later layers"] -. no local hot cache .-> H1
-  end
-
-  subgraph After[Local per-device cache placement]
-    R2["Routers, layers 0–24"] --> H2["Hot cache, 160 slots"]
-    H2 --> G0b["CUDA0: GTX 1080 Ti\nlayers 0–24"]
-    R3["Routers, layers 25–39"] --> H3["Hot cache, 108 slots"]
-    H3 --> G1b["CUDA1: GTX 1070\nlayers 25–39"]
-    R2 --> C2["Cold experts remain in CPU/RAM"]
-    R3 --> C2
-  end
+  T["Token at a cached MoE layer"] --> R["Router selects expert IDs"]
+  R --> M["Split selected IDs with hot/cold maps"]
+  M --> H["Hot experts<br/>cache on the layer's GPU"]
+  M --> C["Cold experts<br/>original weights in CPU/RAM"]
+  H --> O["Combined expert output"]
+  C --> O
 ```
+
+The operational `-ncmoe 33` profile does not cache all 40 layers. Its physical
+placement is:
+
+| Device | Model-layer ownership | Expert residency |
+| --- | --- | --- |
+| CPU / RAM | Cold path for cached layers 0–32 | Original expert weights for layers 0–32 |
+| CUDA0 · GTX 1080 Ti | Layers 0–24 | Hot cache, 160 slots per cached layer |
+| CUDA1 · GTX 1070 | Layers 25–39 | Hot cache, 108 slots per layer for 25–32; all experts resident for 33–39 |
+
+Before the local change, every hot cache pack was allocated on CUDA0, including
+packs for cached layers owned by CUDA1. On a system without CUDA P2P, that
+placement left CUDA1 without a local hot cache for its layer group. The local
+change preserves the layer-to-device assignment and places each cache pack on
+that same device.
 
 The first distributed-cache test established correct placement rather than a
 meaningful speedup: it showed cache packs and VRAM use on both GPUs. The useful
@@ -190,9 +202,9 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 - Host registration (`cudaHostRegister`) is unsupported by the current WSL
   CUDA path. Keep host registration and prefetch off in WSL; test that pair on
   native Linux only.
-- Next work: quality and long-context validation, a replicated 64k HTTP MoE
-  run, then a measured 128k candidate. No performance gain is assumed before
-  measurement.
+- Next work: objective quality and long-context evaluation, a replicated 64k
+  HTTP MoE run, then a measured 128k candidate. No performance gain is assumed
+  before measurement.
 
 ## Repository map
 
@@ -222,24 +234,32 @@ the repository. The modified llama.cpp fork retains its upstream license and
 attribution requirements; publish the local fork changes with the original
 license intact.
 
-## Prebuilt Linux releases
+## Prebuilt Linux release
 
-Release assets are built from `dinolupo/llama.cpp` at the submodule commit
-pinned by this repository. For the first release, that is
-`b00c2d77e` (`pascal-dual-gpu-cache`), which is based on
+The first manually built pre-release is
+[`v0.1.0-pascal-cuda12-sm61`](https://github.com/dinolupo/pascal-frankenstein-llm/releases/tag/v0.1.0-pascal-cuda12-sm61).
+Its assets were built from `dinolupo/llama.cpp` at the submodule commit pinned
+by this repository: `b00c2d77e` (`pascal-dual-gpu-cache`), based on
 `thecodacus/llama.cpp` `perf` at `d927e7dc1`. In other words, the binary
 contains the local per-device cache changes; the upstream fork is its base,
 not the exact source tree being released.
 
-The planned asset name is:
+The release archive is:
 
 ```text
 pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61.tar.gz
 ```
 
-It will contain `llama-cli`, `llama-server`, `llama-bench`, `llama-moe-trace`,
+It contains `llama-cli`, `llama-server`, `llama-bench`, `llama-moe-trace`,
 their required project shared libraries, build metadata, and `SHA256SUMS`. It
-will not contain GGUF model weights or NVIDIA libraries.
+does not contain GGUF model weights or NVIDIA libraries. Download the archive
+and its `.sha256` sidecar from the release page, then verify it before
+extraction:
+
+```bash
+sha256sum -c \
+  pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61.tar.gz.sha256
+```
 
 The upstream build-version string printed by `--version` can still report
 `10125 (d927e7dc1)`. Consult `BUILD_INFO.txt` inside the release asset for the
