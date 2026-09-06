@@ -42,6 +42,7 @@ cp -a "$repo_root/config/qwen.env.example" "$package_dir/config/"
 cp -a "$repo_root/scripts/download-model.sh" \
     "$repo_root/scripts/install-local.sh" \
     "$repo_root/scripts/run-qwen.sh" \
+    "$repo_root/scripts/test-installer.sh" \
     "$repo_root/scripts/verify-install.sh" "$package_dir/scripts/"
 cp -a "$repo_root/moe-traces"/qwen36-35b-merged.csv \
     "$repo_root/moe-traces"/qwen36-35b-mtp-merged.csv "$package_dir/moe-traces/"

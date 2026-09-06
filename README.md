@@ -144,6 +144,16 @@ with an optional pinned revision and SHA-256 check:
 pascal-download-model.sh ORG/REPO model-q4.gguf /models/model-q4.gguf main SHA256
 ```
 
+The release also includes a dependency-light installer smoke test. It uses
+stub executables and never downloads a model:
+
+```bash
+./scripts/test-installer.sh
+```
+
+This test is suitable for a clean Ubuntu/Mint host or a container. It does not
+replace native-GPU validation; CUDA execution and throughput remain host tests.
+
 A preliminary remote test over Tailscale reached 48.61 t/s generation with
 73.1% MTP acceptance, while a Firefox request on the host reached 32.30 t/s
 with 66.4% acceptance. The requests had different prompt and output lengths,
