@@ -27,14 +27,25 @@ quality or long-context work.
 
 ## Development environment
 
-- Development runs in Ubuntu 24.04.1 under WSL2. Use CUDA Toolkit 12.9 and
-  compile for architecture 61. Do not move to CUDA 13: Pascal is not a
-  supported compilation target there.
-- WSL memory was increased from 15 GB to 24 GB, with 4 GB swap, because the
-  mmap-backed model and MoE expert weights need sufficient Linux page cache.
-  At 15 GB, page-cache thrashing dominated and invalidated absolute MoE
-  throughput measurements. Do not lower this allocation before testing; see
-  `BASELINE_LOG.md` for the before/after evidence and `.wslconfig` setting.
+- **Default assumption: native Linux, not WSL2.** The project moved off WSL2
+  to a native Ubuntu install for this hardware. Do not assume WSL2-specific
+  limitations (e.g. the `cudaHostRegister` restriction below, `.wslconfig`
+  memory limits) apply unless something in the current session actually
+  indicates WSL2 is in play. Don't run an environment-detection command on
+  every request just to confirm this — it's not worth the overhead. Instead,
+  notice it opportunistically (shell prompt, kernel string, paths already
+  visible in the conversation) and only run an explicit check
+  (e.g. `uname -r`, `grep microsoft /proc/version`) when a command's behavior
+  genuinely depends on the distinction (e.g. `cudaHostRegister` support,
+  `sudo` availability, display/GPU passthrough topology) and it isn't already
+  clear from context.
+- The historical WSL2 setup (Ubuntu 24.04.1, `.wslconfig` memory bump from
+  15 GB to 24 GB with 4 GB swap to avoid page-cache thrashing with mmap-backed
+  MoE weights) is preserved in `BASELINE_LOG.md` for reference and for any
+  future WSL2 work, but is not the active environment.
+- Use CUDA Toolkit 12.9 and compile for architecture 61 regardless of host
+  OS. Do not move to CUDA 13: Pascal is not a supported compilation target
+  there.
 
 ## Repository boundaries
 
@@ -79,8 +90,9 @@ quality or long-context work.
 ## Operational safety
 
 - Do not run multiple huge model processes concurrently.
-- In WSL, `cudaHostRegister` is currently unsupported. Keep host registration
-  and its paired prefetch experiment disabled there; evaluate them on native
-  Linux only.
+- `cudaHostRegister` was unsupported under the old WSL2 setup; on native
+  Linux it should work, but re-verify (host registration + the paired
+  prefetch experiment) before relying on it, since it hasn't been re-tested
+  since the environment switch.
 - Do not request or handle the user's `sudo` password. Ask the user to run a
   privileged command when one is genuinely necessary.

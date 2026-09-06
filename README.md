@@ -236,6 +236,7 @@ including failed configurations, are retained in the experiment log.
 | **Hot-expert cache** | A GPU copy of the frequently routed experts selected by the profile. Original expert weights remain available in CPU/RAM for cold requests. |
 | **`-ncmoe N`** | Keeps original experts for the first `N` MoE layers in CPU/RAM; later MoE layers keep all their experts in GPU memory. |
 | **MTP** | Multi-Token Prediction: the model proposes multiple future tokens, then verifies them with the main model. It can improve decode speed only when acceptance repays its overhead. |
+| **`mmproj`** | Multimodal projector: a separate GGUF vision encoder that turns an input image into embeddings the main text model can attend to, enabling image understanding. It is specific to the model family it ships with; projectors from different repositories are not interchangeable even when similarly named. |
 | **`pp512` / `tg128`** | Synthetic `llama-bench` prefill of 512 tokens / generation of 128 tokens. They are not equivalent to a real chat request. |
 | **`r=1` / `r=3`** | One repetition is screening only; three is the normal minimum for a reported baseline. |
 
