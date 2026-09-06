@@ -10,7 +10,7 @@ fi
 build_dir=$(cd "$1" && pwd)
 version=${2:-v0.1.0}
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-source_root=$(cd "$build_dir/.." && pwd)
+source_root=${FORK_SOURCE_ROOT:-$(cd "$build_dir/.." && pwd)}
 bin_dir="$build_dir/bin"
 dist_dir="$repo_root/dist"
 package_name="pascal-frankenstein-llm-${version}-linux-x86_64-cuda12-sm61"
@@ -24,7 +24,7 @@ for executable in llama-cli llama-server llama-bench llama-moe-trace; do
 done
 
 if ! git -C "$source_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    printf 'BUILD_DIR must be inside a Git checkout of the fork\n' >&2
+    printf 'set FORK_SOURCE_ROOT to the llama.cpp fork checkout\n' >&2
     exit 1
 fi
 
@@ -48,10 +48,14 @@ cp -a "$repo_root/moe-traces"/qwen36-35b-merged.csv \
 
 fork_commit=$(git -C "$source_root" rev-parse HEAD)
 fork_branch=$(git -C "$source_root" branch --show-current)
-cuda_architecture=$(sed -nE 's/^CMAKE_CUDA_ARCHITECTURES:[^=]*=(.*)$/\1/p' \
-    "$build_dir/CMakeCache.txt" | head -n 1)
-cuda_compiler=$(sed -nE 's/^CMAKE_CUDA_COMPILER:[^=]*=(.*)$/\1/p' \
-    "$build_dir/CMakeCache.txt" | head -n 1)
+cuda_architecture=unknown
+cuda_compiler=unknown
+if [[ -f "$build_dir/CMakeCache.txt" ]]; then
+    cuda_architecture=$(sed -nE 's/^CMAKE_CUDA_ARCHITECTURES:[^=]*=(.*)$/\1/p' \
+        "$build_dir/CMakeCache.txt" | head -n 1)
+    cuda_compiler=$(sed -nE 's/^CMAKE_CUDA_COMPILER:[^=]*=(.*)$/\1/p' \
+        "$build_dir/CMakeCache.txt" | head -n 1)
+fi
 
 {
     printf 'Project: Pascal Frankenstein LLM\n'

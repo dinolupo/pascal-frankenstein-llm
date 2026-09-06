@@ -124,6 +124,10 @@ is not an Unsloth UD quantization.
 Release archives include the CUDA binaries, matching MoE profiles, and portable
 helper scripts. GGUF weights remain external. After extracting an archive:
 
+Maintainers can package an existing build outside the repository by setting
+`FORK_SOURCE_ROOT` to the corresponding llama.cpp checkout before running
+`scripts/package-linux-release.sh`.
+
 ```bash
 ./scripts/install-local.sh .
 ${EDITOR:-vi} ~/.config/pascal-frankenstein-llm/qwen.env
