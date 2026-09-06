@@ -278,6 +278,7 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 | [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
 | [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
 | [MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md) | Operational guide for Qwen 35B-class models: local serving, 128k context, Tailscale, Open WebUI, Pi, and planned tests. |
+| [RELEASE_NOTES_v0.2.0.md](RELEASE_NOTES_v0.2.0.md) | Candidate release scope and installation validation for the portable workflow. |
 | [`config/`](config/) | Example user configuration for the portable release launcher. |
 | [`scripts/`](scripts/) | Release packaging, installation, verification, download, and launch helpers. |
 | [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
