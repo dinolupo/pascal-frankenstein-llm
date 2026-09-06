@@ -25,14 +25,7 @@ The current test asset is a Qwen3.6-35B-A3B GGUF with native MTP tensors. Set
 MODEL=/path/to/qwen35b-mtp.gguf
 ```
 
-SHA-256:
-
-```text
-fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781
-```
-
-The filename above identifies the current local asset. Model variants are not
-interchangeable: record the full filename and hash for every comparison.
+The filename above identifies the current local asset.
 
 ### Binary and routing profile
 
