@@ -119,6 +119,27 @@ not evidence that MTP is unavailable or broken. Unsloth's UD files are separate
 dynamic-quantization artifacts; the local Heretic file preserves native MTP but
 is not an Unsloth UD quantization.
 
+### Portable local installation
+
+Release archives include the CUDA binaries, matching MoE profiles, and portable
+helper scripts. GGUF weights remain external. After extracting an archive:
+
+```bash
+./scripts/install-local.sh .
+${EDITOR:-vi} ~/.config/pascal-frankenstein-llm/qwen.env
+pascal-verify-install.sh
+pascal-run-qwen.sh 64k
+```
+
+The launcher sets `LD_LIBRARY_PATH` itself and supports `64k`, `128k`, and
+`remote` modes. The configuration contains only local paths and is preserved
+when the same installation directory is upgraded. Models can be downloaded
+with an optional pinned revision and SHA-256 check:
+
+```bash
+pascal-download-model.sh ORG/REPO model-q4.gguf /models/model-q4.gguf main SHA256
+```
+
 A preliminary remote test over Tailscale reached 48.61 t/s generation with
 73.1% MTP acceptance, while a Firefox request on the host reached 32.30 t/s
 with 66.4% acceptance. The requests had different prompt and output lengths,
@@ -243,6 +264,8 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 | [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
 | [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
 | [MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md) | Operational guide for Qwen 35B-class models: local serving, 128k context, Tailscale, Open WebUI, Pi, and planned tests. |
+| [`config/`](config/) | Example user configuration for the portable release launcher. |
+| [`scripts/`](scripts/) | Release packaging, installation, verification, download, and launch helpers. |
 | [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
 | [AGENTS.md](AGENTS.md) | Local instructions for coding agents; not end-user documentation. |
 | [LICENSE](LICENSE) | MIT license for this repository; the submodule retains its upstream license. |

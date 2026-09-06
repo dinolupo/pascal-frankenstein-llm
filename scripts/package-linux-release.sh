@@ -33,10 +33,18 @@ stage_dir=$(mktemp -d "$dist_dir/.package.XXXXXX")
 trap 'rm -rf "$stage_dir"' EXIT
 package_dir="$stage_dir/$package_name"
 mkdir -p "$package_dir/bin"
+mkdir -p "$package_dir/config" "$package_dir/scripts" "$package_dir/moe-traces"
 
 cp -a "$bin_dir"/llama-cli "$bin_dir"/llama-server \
     "$bin_dir"/llama-bench "$bin_dir"/llama-moe-trace "$package_dir/bin/"
 cp -a "$bin_dir"/lib*.so* "$package_dir/bin/"
+cp -a "$repo_root/config/qwen.env.example" "$package_dir/config/"
+cp -a "$repo_root/scripts/download-model.sh" \
+    "$repo_root/scripts/install-local.sh" \
+    "$repo_root/scripts/run-qwen.sh" \
+    "$repo_root/scripts/verify-install.sh" "$package_dir/scripts/"
+cp -a "$repo_root/moe-traces"/qwen36-35b-merged.csv \
+    "$repo_root/moe-traces"/qwen36-35b-mtp-merged.csv "$package_dir/moe-traces/"
 
 fork_commit=$(git -C "$source_root" rev-parse HEAD)
 fork_branch=$(git -C "$source_root" branch --show-current)
@@ -63,9 +71,11 @@ cuda_compiler=$(sed -nE 's/^CMAKE_CUDA_COMPILER:[^=]*=(.*)$/\1/p' \
     printf '%s\n' '  - CUDA 12 runtime libraries available on the host.'
     printf '%s\n' '  - NVIDIA Pascal sm_61 target; no GGUF model weights are included.'
     printf '\nUsage after extraction:\n'
-    printf '%s\n' '  export LD_LIBRARY_PATH="$PWD/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'
-    printf '%s\n' '  ./bin/llama-server --help'
-} > "$package_dir/README.txt"
+    printf '%s\n' '  ./scripts/install-local.sh .'
+    printf '%s\n' '  $EDITOR ~/.config/pascal-frankenstein-llm/qwen.env'
+    printf '%s\n' '  pascal-verify-install.sh'
+    printf '%s\n' '  pascal-run-qwen.sh 64k'
+    } > "$package_dir/README.txt"
 
 for executable in llama-cli llama-server llama-bench llama-moe-trace; do
     if LD_LIBRARY_PATH="$package_dir/bin" ldd "$package_dir/bin/$executable" | grep -q 'not found'; then
@@ -76,8 +86,7 @@ done
 
 (
     cd "$package_dir"
-    find bin -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
-    sha256sum BUILD_INFO.txt README.txt >> SHA256SUMS
+    find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 )
 
 tar -C "$stage_dir" -czf "$archive" "$package_name"
