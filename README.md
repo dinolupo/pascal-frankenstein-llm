@@ -96,6 +96,35 @@ most of a 64k context and remain operational at the reported throughput; it
 does not yet validate retrieval, reasoning, or answer quality at that length.
 The HTTP version of the current 64k profile still needs a replicated benchmark.
 
+### Native Linux Mint follow-up
+
+The next experiment branch is `native-linux-mtp-tests`. The current operational
+candidate uses the release binary on native Linux Mint and the
+`Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf` model,
+with the exact command recorded in [`BASELINE_LOG.md`](BASELINE_LOG.md).
+Throughput, MTP acceptance, model hash, and output correctness still need to be
+recorded before this becomes a baseline.
+
+The first native Linux 128k capacity test is now complete: 120,021 effective
+prompt tokens were processed without OOM or context truncation at 153.77 t/s,
+followed by MTP generation at 23.62 t/s with 72.8% acceptance. The test used
+Q8 K/V, one server slot, and `--reasoning-preserve`; its 128-token output limit
+was consumed by reasoning, so it is a capacity result rather than a complete
+agent-quality result.
+
+A controlled short-prompt comparison on the Heretic MTP-preserved model measured
+46.13 t/s with F16 K/V and 45.24 t/s with Q8 K/V, both with MTP enabled. This
+shows that the lower 120k result is primarily a long-context workload result,
+not evidence that MTP is unavailable or broken. Unsloth's UD files are separate
+dynamic-quantization artifacts; the local Heretic file preserves native MTP but
+is not an Unsloth UD quantization.
+
+A preliminary remote test over Tailscale reached 48.61 t/s generation with
+73.1% MTP acceptance, while a Firefox request on the host reached 32.30 t/s
+with 66.4% acceptance. The requests had different prompt and output lengths,
+so these are observations rather than a controlled client comparison; the
+remote path itself did not show an obvious throughput penalty.
+
 ```bash
 cd /home/dino/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-cli \
@@ -213,6 +242,7 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 | [`llama.cpp/`](llama.cpp/) | Git submodule pinned to the local `pascal-dual-gpu-cache` fork commit. |
 | [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
 | [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
+| [MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md) | Operational guide for Qwen 35B-class models: local serving, 128k context, Tailscale, Open WebUI, Pi, and planned tests. |
 | [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
 | [AGENTS.md](AGENTS.md) | Local instructions for coding agents; not end-user documentation. |
 | [LICENSE](LICENSE) | MIT license for this repository; the submodule retains its upstream license. |

@@ -689,6 +689,182 @@ il profilo hot/cold e' stato addestrato sull'altro GGUF, e non e' quindi un
 confronto diretto con i 30,13 t/s MTP del modello Unsloth ufficiale ne' un nuovo
 profilo da adottare.
 
+### Passaggio a Linux Mint nativo: candidato operativo (6 settembre 2026)
+
+L'ambiente di prova e' ora Linux Mint nativo. L'utente riferisce di avere
+installato localmente i binari della release
+`v0.1.0-pascal-cuda12-sm61`; il comando funzionante corrente usa il binario:
+
+```text
+/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server
+```
+
+L'ultimo modello scaricato e funzionante e':
+
+```text
+/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+```
+
+SHA-256 verificato:
+
+```text
+fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781
+```
+
+Il profilo routing resta quello v1 gia' versionato; il suo percorso assoluto nel
+comando seguente presuppone il checkout `/home/dino/pascal-frankenstein-llm`.
+
+Comando funzionante riferito dall'utente:
+
+```bash
+~/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  -m /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  -c 65536 -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk f16 -ctv f16 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 160,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning on --temp 0.7 --seed 123
+```
+
+Questa e' una configurazione operativa iniziale, non ancora una nuova baseline:
+non sono stati ancora registrati throughput, acceptance MTP, VRAM/RAM o
+correttezza dell'output. Il modello corrisponde all'hash atteso per la variante
+`Native-MTP-Preserved`; la creazione del contesto MTP e' da verificare
+nuovamente su Linux nativo.
+
+Stato hardware al 6 settembre 2026, prima del test:
+
+- Linux nativo, driver NVIDIA `580.173.02`, CUDA esposta dal driver `13.0`;
+- GTX 1080 Ti: P2, 2.007 MiB occupati su 11.264 MiB;
+- GTX 1070: P8, 9 MiB occupati su 8.192 MiB;
+- sulla GTX 1080 Ti restano processi grafici desktop/Xorg, Cinnamon e Firefox;
+- il binario della release resta quello verificato:
+  `/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server`.
+
+### Linux Mint nativo: prova reale a 128k (6 settembre 2026)
+
+La release richiede di esportare la directory `bin` nel
+`LD_LIBRARY_PATH`; senza questo export `llama-server` termina con
+`libllama-server-impl.so: cannot open shared object file`. La release inoltre
+non accetta il JSON Reddit `{"preserve_thinking": true}` nella forma provata:
+il test usa l'opzione equivalente disponibile nel binario,
+`--reasoning-preserve`.
+
+Il primo avvio a 128k ha caricato il modello ma ha disabilitato la cache per un
+percorso profilo inesistente e ha aperto quattro slot. E' stato arrestato senza
+benchmark. Il test valido ha usato il profilo presente nel worktree corrente,
+un solo slot e la configurazione seguente:
+
+```bash
+export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+
+/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  --model /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  --port 8001 --alias qwen36-35b-a3b --parallel 1 \
+  -c 131072 -n 32768 --no-context-shift \
+  -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 160,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning on --reasoning-preserve \
+  --temp 0.6 --top-p 0.95 --top-k 20 \
+  --repeat-penalty 1.0 --presence-penalty 0.0 \
+  --host 127.0.0.1 --jinja --no-webui
+```
+
+Il server ha allocato `n_ctx_slot=131072`, un solo slot, e ha risposto
+`/health` con `status=ok`. Il prompt deterministico di prova conteneva
+120.000 token misurati dall'endpoint `/tokenize`; con il template la richiesta
+ha elaborato 120.021 token. Risultati HTTP:
+
+| Misura | Risultato |
+| --- | ---: |
+| Codice HTTP | 200 |
+| Prompt processing | 780,52 s; **153,77 t/s** |
+| Generation | 128 token; **23,62 t/s** |
+| Tempo totale | 785,94 s |
+| MTP acceptance | **75/103 = 72,8%**; lunghezza media 2,44 |
+| Context shift / truncation | disabilitato / `truncated=0` |
+| Fine risposta | `length`, durante il reasoning |
+
+Il reasoning restituito è coerente con l'obiettivo del test; il campo `content`
+è rimasto vuoto perché il limite di 128 token è stato consumato dal reasoning.
+Questa prova dimostra la capacità operativa del contesto quasi pieno, non la
+qualità finale di una risposta agent completa.
+
+Durante l'esecuzione la VRAM è rimasta quasi piena ma stabile: circa
+10.968--11.045 MiB sulla GTX 1080 Ti e 7.919 MiB sulla GTX 1070. Il picco
+osservato è stato circa 74--75 °C sulla 1080 Ti e 55--60 °C sulla 1070; la
+1080 Ti ha raggiunto circa 99% di utilizzo GPU e 227 W. Il processo ha usato
+circa 16,8 GiB RSS; il sistema ha mantenuto circa 1,4 GiB di swap occupata.
+
+I log completi sono conservati localmente in
+`/home/dino/pascal-test-logs/`, incluso il log server
+`20260906-163525-128k-server.log`, la richiesta/risposta HTTP e il campione
+GPU del test. Il test è riuscito come prova di capacità 128k; la prossima
+prova deve usare un `max_tokens` maggiore per separare reasoning e risposta
+finale e misurare correttamente il comportamento dell'agente.
+
+### Confronto rapido Heretic 64k: F16 contro Q8 K/V (6 settembre 2026)
+
+Per separare l'effetto del contesto lungo da quello del modello e della KV,
+sono state eseguite tre richieste identiche sul modello Heretic MTP-preserved,
+con MTP sempre attivo, cache `160,108`, `-ncmoe 33`, split `10,7`, un solo
+slot, reasoning disattivato e 128 token forzati (`ignore_eos=true`). Il prompt
+di 1.841 token era identico in tutte le prove.
+
+| KV | Generation | Acceptance MTP | Stato |
+| --- | ---: | ---: | --- |
+| F16/F16 | **45,91 / 46,56 / 45,91 t/s** | 78/97, poi 79/95, 79/95 | tre repliche valide |
+| Q8_0/Q8_0 | **45,34 / 45,49 / 44,90 t/s** | 79/94 in tutte | tre repliche valide |
+
+Medie: F16 **46,13 t/s**, Q8 **45,24 t/s**. La differenza di circa 1,9%
+è piccola sul prompt breve; la KV Q8 non spiega il calo da 30 a 23,6 t/s
+osservato sul contesto realmente popolato a 120k.
+
+La prova ha prodotto risposte corrette nelle richieste brevi (`17 times 19 is
+323.`). Il valore di circa 46 t/s non è direttamente confrontabile con il
+precedente `30,13 t/s` se il workload, il client e la lunghezza del prompt
+differiscono; dimostra però che il checkpoint Heretic conserva un percorso MTP
+veloce su contesto corto.
+
+La documentazione pubblica di Unsloth descrive il checkpoint
+`Qwen3.6-35B-A3B-MTP-GGUF` come modello con MTP nativo addestrato multi-step,
+35B totali/3B attivi e contesto nativo 262.144. Le quantizzazioni `UD` sono
+artefatti Unsloth separati (dynamic quantization), mentre il modello locale
+Heretic `Native-MTP-Preserved-Q4_K_M` è una conversione Heretic che preserva i
+20 blocchi MTP, non una quantizzazione UD Unsloth. Non è stata trovata una
+release pubblica che combini esplicitamente Heretic + Native MTP Preserved +
+UD-Q4_K_XL; non va quindi presunto che esista o che sia intercambiabile con il
+file locale.
+
+### Linux Mint: confronto preliminare mobile/Tailscale contro Firefox locale
+(6 settembre 2026)
+
+Con lo stesso server Heretic a 64k, cache `160,108`, MTP `n-max=2`, KV Q8,
+split `10,7`, un solo slot e `--host 0.0.0.0`, sono state osservate due
+richieste provenienti da client diversi:
+
+| Client | Prompt | Generation | Acceptance MTP | Note |
+| --- | ---: | ---: | ---: | --- |
+| Mobile via Tailscale | 338 token | **48,61 t/s** | 348/476 = **73,1%** | 585 token generati |
+| Firefox sul server | 18 token | **32,30 t/s** | 223/336 = **66,4%** | 390 token generati; LCP `sim_best=0,962` |
+
+Il server ha riportato anche un valore transitorio di 49,54 t/s durante la
+prima richiesta. Il risultato non è ancora un A/B scientifico: i prompt,
+template, lunghezze di risposta e acceptance MTP differiscono; la seconda
+richiesta inoltre ha riutilizzato un prefisso tramite LCP cache. Il dato
+importante è però che il percorso remoto via Tailscale non mostra un overhead
+apprezzabile e ha raggiunto circa 48,6 t/s sul workload più favorevole.
+
+Il log contiene tre richieste `unauthorized: Invalid API Key`, probabilmente
+generate da controlli del client/browser prima della richiesta valida. La API
+key usata nel comando è stata esposta nella conversazione e va ruotata prima
+di lasciare il server accessibile ad altri dispositivi. Per i prossimi test
+usare una chiave nuova, lunga e non pubblicarla nei log condivisi.
+
 ## Raccomandazione conclusiva
 
 1. **Chat/coding con massima prudenza qualitativa:** Qwen3.8-27B Q4_K_M dense,
