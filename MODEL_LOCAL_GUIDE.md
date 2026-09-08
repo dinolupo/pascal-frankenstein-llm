@@ -296,18 +296,77 @@ with long generations favor CPU-side; long/heavy image prompts with short
 answers may favor GPU-offload). A full numeric comparison (prompt t/s,
 generation t/s, MTP acceptance %) on the same test image is still open work.
 
-### Idea to revisit: moving the Linux display to the motherboard's iGPU
+### Root cause found for the "1-2 GiB extra" desktop VRAM usage: DSR was on
 
-The board is an MSI Z97S SLI Krait Edition (MS-7922, Z97 chipset) paired
-with an Intel Core i7-4790K, which has an integrated GPU (Intel HD Graphics
-4600) wired to the motherboard's own video output. Today the desktop
-session's rendering/display overhead sits on one of the two NVIDIA cards
-(likely explaining the ~1.8-2.4 GiB of GPU0 VRAM that could not be reclaimed
-during earlier OOM troubleshooting in this document). Moving the display
-output to the iGPU output on the motherboard would free that VRAM on the
-1080 Ti/1070 for `llama-server`, which could be enough on its own to fit the
-GPU-offloaded `mmproj` buffer without reducing `--moe-cache-slots` at all.
-Not yet tested — planned as a follow-up experiment.
+Investigated on 7 September 2026 after the desktop occasionally showed
+1-2 GiB more GPU0 VRAM used than expected during vision testing. The
+monitor (Dell/Alienware AW3425DWM, native 3440x1440 UW-QHD, confirmed via
+EDID) was being driven at an internally-rendered **5504x2304** with a
+1.60x downscale to the panel (`ViewPortIn=5504x2304`,
+`ViewPortOut=3440x1440`, bilinear resample) — i.e. **DSR (Dynamic Super
+Resolution) at 1.60x** was active for the Linux desktop. That is 2.56x the
+native pixel count (12.68M vs 4.95M px), and it inflates every GPU-side
+buffer tied to screen resolution: the X server alone measured 591 MiB used
+at the scaled resolution vs. 413 MiB immediately after resetting to native
+(saved with the desktop otherwise unchanged), with more expected to be
+recovered once already-open GL apps (browser, editor) re-allocate their
+surfaces at native size after a logout/restart.
+
+This setting was **not** persisted anywhere on disk (checked
+`/etc/X11/xorg.conf`, `/etc/X11/xorg.conf.d/`, `~/.config/autostart/`,
+`~/.config/monitors.xml` — none reference the scaled mode; `xorg.conf`
+correctly lists plain `metamodes "3440x1440_180 +0+0"`), so it was applied
+interactively at some point in the current session/login rather than by any
+startup script, and does not need a permanent fix — only a reset when it
+recurs.
+
+Fix applied live, no reboot required:
+
+```bash
+nvidia-settings --assign CurrentMetaMode="DPY-6: 3440x1440_180 @3440x1440 +0+0 {ViewPortIn=3440x1440, ViewPortOut=3440x1440+0+0, ResamplingMethod=Nearest}"
+```
+
+Adjust the `DPY-6` label and native resolution to match `nvidia-settings -q
+CurrentMetaMode` output on the machine in use. If this recurs, check
+`nvidia-settings -q CurrentMetaMode` for a `ViewPortIn` that doesn't match
+the monitor's native resolution, and reset it the same way.
+
+### Idea investigated and abandoned: moving the Linux display to the motherboard's iGPU
+
+The board is an MSI Z97S SLI Krait Edition (MS-7922, Z97 chipset, BIOS
+V10.7 / A.7 dated 02/16/2016 — the latest official release, no newer
+firmware available) paired with an Intel Core i7-4790K, which has an
+integrated GPU (Intel HD Graphics 4600) wired to the motherboard's own video
+output. The original idea was to move the desktop's display output to the
+iGPU to free the VRAM the desktop session occupies on GPU0/GPU1 for
+`llama-server`.
+
+Tried on 7 September 2026: enabling IGD in BIOS (regardless of whether it
+was set as primary display) caused Linux Mint to fail to boot with
+`Decompression failed: ZSTD-compressed data is corrupt (status=20)`, on
+every attempt. Researched before pursuing further:
+
+- The system boots UEFI + GPT + rEFInd (confirmed via `efibootmgr`), so the
+  classic "toggling IGD flips CSM/legacy vs. UEFI and breaks GRUB's
+  block-list embedding" failure mode does not apply here.
+- The board is already on its final official BIOS revision; there is no
+  newer firmware to try, and MSI has not published further updates for this
+  end-of-life Z97 model.
+- Enabling the iGPU alongside a discrete GPU on this board reserves
+  additional stolen/DVMT memory and reshuffles the platform memory map;
+  boot-time zstd/checksum corruption on early kernel/initrd decompression
+  immediately after such a BIOS-level memory-map change is a known failure
+  category on this generation of hardware, and is not something fixable
+  from the Linux/GRUB/rEFInd side, since the corruption happens before the
+  OS has any control.
+
+**Decision: do not pursue this further.** The risk (a known firmware-level
+bug on an end-of-life board with no update path) outweighs the benefit,
+especially now that the DSR fix above already recovers a comparable amount
+of VRAM with no risk and no reboot. If more VRAM headroom is needed later,
+prefer the `--moe-cache-slots` reduction path already documented above, or
+simply close GPU-accelerated desktop apps (browser, editor) before starting
+a large `llama-server` run.
 
 ## Measured results
 
