@@ -49,7 +49,8 @@ quality or long-context work.
 
 ## Repository boundaries
 
-- `ds4/` and `q36/` are upstream reference checkouts. Do not modify them.
+- if existing `ds4/` and `q36/` folders are present, those are upstream reference
+  checkouts. Do not modify them.
 - `llama.cpp/` is the working llama.cpp fork. Its upstream baseline
   is branch `perf`, initially commit `d927e7dc1`; local changes must remain
   attributable and reproducible.
@@ -83,9 +84,6 @@ quality or long-context work.
   throughput, generation throughput, and correctness observations.
 - `pp512` is synthetic prefill and `tg128` is synthetic generation; neither is
   equivalent to a real chat request.
-- `llama-cli` and `llama-server` use `-ts 10,7`. In this `llama-bench`, use
-  `-ts 10/7` for one tensor-split configuration: a comma starts separate
-  benchmark configurations and can cause OOM.
 
 ## Operational safety
 

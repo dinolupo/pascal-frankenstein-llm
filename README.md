@@ -67,7 +67,7 @@ adaptation.
 | `llama-server` coding request | 16k | **89.02 t/s** | **10.37 t/s** | 1 | correct response |
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm
+cd $HOME/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-server \
   -m /mnt/e/lmstudio-models/lmstudio-community/Qwen3.8-27B-GGUF/Qwen3.8-27B-Q4_K_M.gguf \
   -c 16384 --parallel 1 -ngl 999 \
@@ -161,12 +161,12 @@ so these are observations rather than a controlled client comparison; the
 remote path itself did not show an obvious throughput penalty.
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm
+cd $HOME/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-cli \
-  -m /home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf \
+  -m $HOME/llm-models/pascal-tests/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf \
   -c 65536 -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk f16 -ctv f16 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning off --temp 0 --seed 123
@@ -243,7 +243,7 @@ including failed configurations, are retained in the experiment log.
 ### Build used for the measurements
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm/llama.cpp
+cd $HOME/pascal-frankenstein-llm/llama.cpp
 cmake -S . -B build-pascal-cuda -G Ninja \
   -DGGML_CUDA=ON \
   -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.9/bin/nvcc \
