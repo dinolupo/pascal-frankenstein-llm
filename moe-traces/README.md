@@ -14,4 +14,4 @@ workloads for the same model, then concatenate the resulting CSV files.
 
 The larger multi-domain v2 study was not adopted for the MTP operating profile
 and is kept outside this lean public repository. Its configuration, hashes, and
-measured conclusion are recorded in `BASELINE_LOG.md`.
+measured conclusion are recorded in `doc/BASELINE_LOG.md`.

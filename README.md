@@ -47,7 +47,7 @@ WSL2 is the development environment, not a hardware property. Its memory limit
 was raised from 15 GB to 24 GB because the mmap-backed model and MoE expert
 weights need enough Linux page cache. At 15 GB, page-cache thrashing dominated
 the early MoE measurements; the full before/after record and `.wslconfig`
-setting are in `BASELINE_LOG.md`.
+setting are in `doc/BASELINE_LOG.md`.
 
 The NVIDIA Control Panel power mode must be **Prefer maximum performance**.
 Without it, decode can fall to P5 clocks and invalidate measurements.
@@ -101,7 +101,7 @@ The HTTP version of the current 64k profile still needs a replicated benchmark.
 The next experiment branch is `native-linux-mtp-tests`. The current operational
 candidate uses the release binary on native Linux Mint and the
 `Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf` model,
-with the exact command recorded in [`BASELINE_LOG.md`](BASELINE_LOG.md).
+with the exact command recorded in [`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md).
 Throughput, MTP acceptance, model hash, and output correctness still need to be
 recorded before this becomes a baseline.
 
@@ -276,10 +276,11 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 | Path | Purpose |
 | --- | --- |
 | [`llama.cpp/`](llama.cpp/) | Git submodule pinned to the local `pascal-dual-gpu-cache` fork commit. |
-| [BASELINE_LOG.md](BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
-| [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
-| [MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md) | Operational guide for Qwen 35B-class models: local serving, 128k context, Tailscale, Open WebUI, Pi, and planned tests. |
-| [RELEASE_NOTES_v0.2.0.md](RELEASE_NOTES_v0.2.0.md) | Candidate release scope and installation validation for the portable workflow. |
+| [`doc/`](doc/) | Project documentation: experiment log, benchmarks, model operations guide, release notes. |
+| [doc/BASELINE_LOG.md](doc/BASELINE_LOG.md) | Complete chronological experiment record, commands, parameters, failures, and measurements. Historical notes are retained in Italian. |
+| [doc/BENCHMARKS_AND_QUALITY.md](doc/BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
+| [doc/MODEL_LOCAL_GUIDE.md](doc/MODEL_LOCAL_GUIDE.md) | Operational guide for Qwen 35B-class models: local serving, 128k context, Tailscale, Open WebUI, Pi, and planned tests. |
+| [doc/RELEASE_NOTES_v0.2.0.md](doc/RELEASE_NOTES_v0.2.0.md) | Candidate release scope and installation validation for the portable workflow. |
 | [`config/`](config/) | Example user configuration for the portable release launcher. |
 | [`scripts/`](scripts/) | Release packaging, installation, verification, download, and launch helpers. |
 | [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |

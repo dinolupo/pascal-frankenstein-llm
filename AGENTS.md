@@ -10,8 +10,8 @@ optimization target. The actual adaptation target is
 Qwen3.6-35B-A3B MoE: expert caching, CPU/GPU prefetch, and speculative decoding
 in the `perf` branch of `thecodacus/llama.cpp`.
 
-Read `README.md` for the current public summary, `BASELINE_LOG.md` for the
-complete experiment record, and `BENCHMARKS_AND_QUALITY.md` before proposing
+Read `README.md` for the current public summary, `doc/BASELINE_LOG.md` for the
+complete experiment record, and `doc/BENCHMARKS_AND_QUALITY.md` before proposing
 quality or long-context work.
 
 ## Hardware invariants
@@ -41,7 +41,7 @@ quality or long-context work.
   clear from context.
 - The historical WSL2 setup (Ubuntu 24.04.1, `.wslconfig` memory bump from
   15 GB to 24 GB with 4 GB swap to avoid page-cache thrashing with mmap-backed
-  MoE weights) is preserved in `BASELINE_LOG.md` for reference and for any
+  MoE weights) is preserved in `doc/BASELINE_LOG.md` for reference and for any
   future WSL2 work, but is not the active environment.
 - Use CUDA Toolkit 12.9 and compile for architecture 61 regardless of host
   OS. Do not move to CUDA 13: Pascal is not a supported compilation target
@@ -74,7 +74,7 @@ quality or long-context work.
 
 ## Measurement rules
 
-- Do not repeat a setup already recorded in `BASELINE_LOG.md` unless the purpose
+- Do not repeat a setup already recorded in `doc/BASELINE_LOG.md` unless the purpose
   is replication or a clearly identified variable has changed.
 - Change one variable at a time. Use `r=1` only for screening; normally require
   at least `r=3` before calling a result a baseline.
