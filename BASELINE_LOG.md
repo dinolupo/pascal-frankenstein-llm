@@ -51,6 +51,48 @@ Il valore di 4–6 token/s è la baseline iniziale da battere; 30 token/s su 8B 
 un riferimento del potenziale quando non intervengono offload e comunicazioni
 tra dispositivi.
 
+## Campagna certificata Qwen3.8 Flash Next (11 settembre 2026)
+
+La prova del modello `unsloth/Qwen3.8-Flash-Next-GGUF`, quantizzazione
+`UD-IQ3_XXS`, è stata chiusa con `llama-server` e richieste HTTP bounded sul
+sistema Linux Mint nativo. Il modello principale è di circa 82 GB; sono stati
+usati `--load-mode mmap`, `-fit off`, contesto 32k, una richiesta alla volta e
+nessun processo concorrente. Sono state provate sia la configurazione
+single-GPU stile Codacus sia la distribuzione dual-GPU asimmetrica del progetto.
+
+La migliore configurazione API a 32k è risultata:
+
+```text
+-ts 10,7 -ncmoe 44 --moe-cache-slots 80,40
+-ctk q8_0 -ctv q8_0 -b 512 -ub 256 -t 4
+MTP disabilitato
+prefill 12.60 tok/s
+generation 1.95 tok/s
+```
+
+Con contesto 16k, la variante migliore ha raggiunto 11.10 tok/s in prefill e
+2.15 tok/s in generation. Dieci ulteriori prove hanno variato:
+
+- `-t 3/4/6` e `--no-sched-async-cpu`;
+- cache `64,32`, `80,40`, `96,32` e `72,32`;
+- `-ncmoe 43`, `44` e `99`;
+- KV `q4_0/q8_0`, `q8_0/q4_0` e `q8_0/q8_0`;
+- MTP attivo/disattivato;
+- contesto 16k/32k;
+- single-GPU e dual-GPU;
+- batch 512 e 1024.
+
+Il range completo è rimasto tra 1.71 e 2.15 tok/s in generation. Con MTP
+l'accettazione draft era alta, ma il costo del draft non migliorava il
+throughput end-to-end. Il risultato certifica che il modello funziona, ma che
+su i7-4790K/DDR3 e due GPU Pascal il percorso mmap/MoE è limitato da CPU,
+memoria, traffico page-cache/SSD e kernel CUDA legacy; non è stato trovato un
+flag runtime capace di portarlo a 10 tok/s in generation.
+
+Il piano completo, i comandi e i risultati riproducibili sono in
+`QWEN38_FLASH_SERVER_TEST_PLAN.md`; il JSONL della campagna è
+`qwen38_flash_sweep_results.jsonl`.
+
 ## Campagna finale WSL del 1 settembre 2026
 
 Questa sezione contiene le misure conclusive ottenute dopo aver corretto la

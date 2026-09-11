@@ -119,6 +119,37 @@ not evidence that MTP is unavailable or broken. Unsloth's UD files are separate
 dynamic-quantization artifacts; the local Heretic file preserves native MTP but
 is not an Unsloth UD quantization.
 
+### Certified Qwen3.8 Flash Next result
+
+Qwen3.8-Flash-Next UD-IQ3_XXS was tested on the native Linux Mint Pascal rig
+using `llama-server` and bounded HTTP API requests at 32k context. The campaign
+covered the Codacus-style single-GPU layout, the dual-GPU asymmetric layout,
+MTP on and off, CPU thread counts, CPU scheduling, cache distributions,
+mixed KV quantization, 16k context, larger batch, and `-ncmoe 43/44/99`.
+
+The best measured result was the dual-GPU `-ncmoe 44`, cache `80,40`, Q8 K/V
+configuration without MTP:
+
+```text
+prefill:    12.60 tok/s
+generation:  1.95 tok/s
+```
+
+The best generation result was the same dual-GPU layout at 16k context:
+
+```text
+prefill:    11.10 tok/s
+generation:  2.15 tok/s
+```
+
+Ten additional controlled variants remained between 1.71 and 2.15 generation
+tok/s. MTP draft acceptance was high when enabled, but did not improve
+end-to-end throughput on this model and hardware. This is a certified
+diagnostic result, not the recommended daily-use profile: Qwen3.8 Flash Next
+is functional but not practically fast enough on the i7-4790K/DDR3/Pascal
+system. Full commands, timings, and the complete sweep are in
+[QWEN38_FLASH_SERVER_TEST_PLAN.md](QWEN38_FLASH_SERVER_TEST_PLAN.md).
+
 ### Portable local installation
 
 Release archives include the CUDA binaries, matching MoE profiles, and portable
