@@ -30,24 +30,40 @@ substantial assistance from ChatGPT/Codex. The human operator set the hardware
 constraints, selected the experiments, ran and validated them, and decided
 which results were retained.
 
+## Current operational setup
+
+The current working setup is not Qwen3.8-Flash-Next. It is the Heretic
+Qwen3.6-35B-A3B `Native-MTP-Preserved` Q4_K_M GGUF on the dual Pascal rig,
+using `-ts 10,7`, `-ncmoe 33`, distributed cache slots, and MTP
+`--spec-draft-n-max 2`.
+
+The two commands to use first are in [MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md):
+
+- text/coding server: 128k context, cache `160,108`;
+- vision server: 64k context, matching BF16 projector, GPU projector offload,
+  cache `130,108`.
+
+Qwen3.8-Flash-Next is an experimental branch/model investigation and should
+not replace the verified Qwen3.6 Heretic setup until it has a stable measured
+baseline on this hardware.
+
 ## Development hardware and constraints
 
 | Component | Configuration |
 | --- | --- |
 | Host hardware | Intel i7-4790K (AVX2), 32 GB DDR3 |
-| Development environment | Ubuntu 24.04.1 under WSL2; 24 GB RAM + 4 GB swap allocated to WSL |
+| Development environment | Native Linux Mint for current runs; historical WSL2 measurements are retained in `BASELINE_LOG.md` |
 | CUDA0 | GTX 1080 Ti, 11 GB, Pascal `sm_61` |
 | CUDA1 | GTX 1070, 8 GB, Pascal `sm_61` |
-| CUDA / driver | CUDA Toolkit 12.9, Windows driver 581.80 |
+| CUDA / driver | CUDA Toolkit 12.9; native Linux NVIDIA driver recorded in `BASELINE_LOG.md` |
 
 Pascal is not supported as a compilation target by CUDA 13, so the build stays
 on CUDA 12.9. CUDA Graphs being disabled on this architecture is expected.
 
-WSL2 is the development environment, not a hardware property. Its memory limit
-was raised from 15 GB to 24 GB because the mmap-backed model and MoE expert
-weights need enough Linux page cache. At 15 GB, page-cache thrashing dominated
-the early MoE measurements; the full before/after record and `.wslconfig`
-setting are in `BASELINE_LOG.md`.
+WSL2 was used for early measurements only. The current working environment is
+native Linux Mint. Historical WSL2 notes, including the old memory-limit change,
+remain in `BASELINE_LOG.md` for reproducibility but should not be used as the
+default assumption for new runs.
 
 The NVIDIA Control Panel power mode must be **Prefer maximum performance**.
 Without it, decode can fall to P5 clocks and invalidate measurements.

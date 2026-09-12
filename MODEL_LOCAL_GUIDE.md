@@ -16,16 +16,20 @@ GPUs. Complete chronological measurements remain in
 - CUDA 12 release binaries, Pascal `sm_61`.
 - CUDA P2P must remain disabled.
 
-### Current model asset
+### Current working asset
 
-The current test asset is a Qwen3.6-35B-A3B GGUF with native MTP tensors. Set
-`MODEL` to the exact local file being tested:
+The current working asset is the Heretic Qwen3.6 model with native MTP tensors
+preserved:
 
 ```text
-MODEL=/path/to/qwen35b-mtp.gguf
+/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
 ```
 
-The filename above identifies the current local asset.
+Use its matching projector for vision:
+
+```text
+/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+```
 
 ### Binary and routing profile
 
@@ -40,18 +44,30 @@ The release requires:
 export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
 ```
 
-## Verified 128k capacity command
+## Authoritative working commands
 
-This configuration processed 120,021 effective prompt tokens without OOM or
-context shifting:
+These are the commands to keep visible first. They are tuned for this exact
+dual-GPU Pascal system: GTX 1080 Ti on CUDA0, GTX 1070 on CUDA1, `-ts 10,7`,
+hybrid MoE residency with `-ncmoe 33`, distributed hot-expert cache, Q8 K/V,
+and MTP `n-max=2`.
+
+Do not copy a real API key into documentation, logs, screenshots, or shared
+chat. Replace the placeholder before exposing the server beyond localhost.
+
+### Text-only server: 128k context, remote-ready
+
+This is the current primary text/coding configuration. A previous equivalent
+128k test processed 120,021 effective prompt tokens without OOM or context
+shifting, with 153.77 prompt t/s, 23.62 generation t/s, and 72.8% MTP
+acceptance.
 
 ```bash
 export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
-MODEL=/path/to/qwen35b-mtp.gguf
 
 /home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
-  --model "$MODEL" \
-  --host 127.0.0.1 --port 8001 --alias qwen36-35b-a3b --parallel 1 \
+  --model /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
+  --api-key 'replace-with-a-long-random-key' \
   -c 131072 -n 32768 --no-context-shift \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
@@ -61,36 +77,68 @@ MODEL=/path/to/qwen35b-mtp.gguf
   --reasoning on --reasoning-preserve \
   --temp 0.6 --top-p 0.95 --top-k 20 \
   --repeat-penalty 1.0 --presence-penalty 0.0 \
-  --jinja --no-webui
+  --jinja
 ```
 
-For remote use, replace `--host 127.0.0.1` with `--host 0.0.0.0` and add a
-long, private key:
+### Vision server: 64k context, GPU-offloaded projector
+
+This is the current primary image-capable configuration. It intentionally
+reduces only the GPU0 expert-cache budget from `160` to `130` slots so the
+BF16 projector can fit on the 1080 Ti while leaving the 1070 cache budget at
+`108`. Keep `--image-min-tokens 1024`; it suppresses the Qwen-VL projector
+startup warning for small images.
 
 ```bash
---api-key 'replace-with-a-long-random-key'
+export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+
+/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  --model "$MODEL" --mmproj "$MMPROJ" --mmproj-offload --image-min-tokens 1024 \
+  --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
+  --api-key 'replace-with-a-long-random-key' \
+  -c 65536 -n 32768 --no-context-shift \
+  -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 130,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning on --reasoning-preserve \
+  --temp 0.6 --top-p 0.95 --top-k 20 \
+  --repeat-penalty 1.0 --presence-penalty 0.0 \
+  --jinja
 ```
 
-`0.0.0.0` is a listen address, not the address to enter in a browser. Remote
-clients use the server's Tailscale address.
+### Local-only variant
 
-### Same profile with vision enabled (`mmproj`)
+For local-only use, change `--host 0.0.0.0` to `--host 127.0.0.1`.
+`0.0.0.0` is only a listen address; remote clients use the server's Tailscale
+address.
 
-To add image understanding to this profile, load the matching projector with
-`--mmproj`. The projector for this model
-(`Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf`)
-is confirmed present locally; see "Verified and candidate models" below.
+## Verified 128k capacity result
 
-**GPU offload (`--mmproj-offload`, the default) fails at this cache/context
-size.** With `-ncmoe 33`, cache `160,108`, and 64k context (`-ctk/-ctv q8_0`),
-GPU0 (11 GB) is already nearly full before the projector tries to allocate;
-the load aborts with `cudaMalloc failed: out of memory` while allocating the
-~861 MiB projector buffer, even at a reduced 16k context. This is a VRAM
-budget conflict with the hot-expert cache and KV, not a broken projector.
+The 128k text profile above is backed by this measured run:
 
-**Verified working command: CPU-side projector (`--no-mmproj-offload`).**
-This loads and answers correctly, at the cost of much slower prompt
-processing during vision requests (projector compute runs on CPU):
+| Measure | Result |
+| --- | ---: |
+| HTTP code | 200 |
+| Effective prompt tokens | 120,021 |
+| Prompt processing | 780.52 s; **153.77 t/s** |
+| Generation | 128 tokens; **23.62 t/s** |
+| MTP acceptance | **75/103 = 72.8%** |
+| Context shift / truncation | disabled / `truncated=0` |
+| Peak observed VRAM | GPU0 about 10,968-11,045 MiB; GPU1 about 7,919 MiB |
+| Host memory | about 16.8 GiB RSS; about 1.4 GiB swap used |
+
+The 128-token output limit was consumed by reasoning, so this is a capacity and
+MTP-throughput result, not a complete long-answer quality test.
+
+### Vision fallback: CPU-side projector
+
+If the desktop consumes too much GPU0 VRAM for `--mmproj-offload`, use the
+same matching projector with `--no-mmproj-offload`. This keeps the full
+`160,108` hot-expert cache but moves projector compute to CPU, so image prompt
+processing is much slower.
 
 ```bash
 export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
@@ -112,10 +160,6 @@ MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MT
   --jinja
 ```
 
-`--image-min-tokens 1024` silences a startup warning specific to this
-Qwen-VL projector about grounding-task accuracy; it does not change whether
-the model loads.
-
 Verified on 6 September 2026 with the OCR image from `~/pascal-vision-samples`
 (`01-street-sign-ocr.jpg`, a stop-sign photo with "WHOA" and "PARKER RANCH
 CENTER" text): the model correctly read both text elements in its reasoning
@@ -134,10 +178,8 @@ before the 200-token limit cut off the final answer. Result at 16k, one run:
 The 18 t/s prompt speed reflects CPU-side image encoding, not the text-only
 prefill speed; a WebUI-driven test (uploading the same image through the
 built-in browser interface instead of a raw `curl` request) has not yet been
-tried. GPU-offloaded projector performance at this cache size remains
-unverified; it would require either a smaller hot-expert cache, a shorter
-context, or freeing more of GPU0's ~2 GiB non-reclaimable baseline usage
-before it can be attempted.
+tried. GPU-offloaded projector at 64k is handled by the primary vision command
+above, using the reduced `130,108` cache split.
 
 ### Confirmed working at 64k
 
@@ -181,10 +223,8 @@ at 64k, one run:
 | GPU1 used / free VRAM after load | 7185 MiB / 923 MiB |
 
 Both GPUs remain within their VRAM budget at 65,536-token capacity with the
-CPU-side projector, leaving 320–923 MiB free per device. GPU-offloaded
-projector is still expected to fail at 64k for the same reason it fails at
-16k (see above); it has not been retried at 64k because it already failed at
-the smaller context.
+CPU-side projector, leaving 320-923 MiB free per device. This is still useful
+as a fallback when GPU0 is too full for the faster projector path.
 
 ### GPU utilization is asymmetric during vision requests
 
@@ -210,7 +250,7 @@ controlled text-only comparison at the same settings is open work before
 concluding whether this is a vision-specific regression or a pre-existing
 property of this cache/split configuration.
 
-### GPU-offloaded projector at 64k: reducing `--moe-cache-slots`
+### GPU-offloaded projector at 64k: why the primary command uses `130,108`
 
 The GPU-offload failure above was reproduced at both 16k and 64k with the
 default hot-expert cache split (`--moe-cache-slots 160,108`): the projector's
@@ -242,12 +282,10 @@ Findings:
 - **Recommended configuration for GPU-offloaded vision at 64k:
   `--moe-cache-slots 130,108`** — a safer margin below the 140-slot cliff
   edge while still caching most of the default 160-slot budget on GPU0.
-  This has not yet been verified end-to-end with an actual image request
-  (only a fast health-check load was tested); before relying on it, run a
-  real vision request and confirm output quality and generation speed are
-  acceptable, since reducing cached experts on GPU0 will lower the hot-expert
-  hit rate for text/MoE routing and may slow generation compared to the
-  default 160,108 split.
+  This is now the primary GPU-projector command at the top of this guide.
+  Record full prompt/generation throughput and MTP acceptance for the next
+  image request so it can be promoted from working command to measured
+  benchmark.
 
 ```bash
 export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
@@ -269,10 +307,10 @@ MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MT
   --jinja
 ```
 
-Open work: verify this command end-to-end with a real image request (VRAM
-under load, generation throughput, MTP acceptance) and compare its
-performance to the CPU-side-projector baseline above to decide which path is
-actually preferable for day-to-day vision use at 64k.
+Open work: record a full numeric benchmark for this already-working command
+(VRAM under load, prompt/generation throughput, MTP acceptance) and compare it
+to the CPU-side-projector fallback above to decide which path is preferable
+for day-to-day vision use at 64k.
 
 ### Qualitative comparison: GPU-offloaded vs. CPU-side projector at 64k
 
@@ -525,6 +563,12 @@ It works for any file hosted on a public (non-gated) Hugging Face repository,
 which covers every entry below. `MODEL_DIR` is the external model directory
 used throughout this guide.
 
+When `hf download` is used without `--local-dir`, files are stored in the
+standard Hugging Face cache instead of `MODEL_DIR`. On this Linux Mint host
+that means `~/.cache/huggingface/hub/`. This is valid for direct llama.cpp use:
+point `--model`/`-m` at the first GGUF shard inside the snapshot directory, and
+the adjacent shards are resolved automatically.
+
 | Model | Role | Status | Repository | Revision | Download command |
 | --- | --- | --- | --- | --- | --- |
 | Qwen3.8-27B-Q4_K_M | Dense chat/coding baseline | Verified (16k, full offload) | `lmstudio-community/Qwen3.8-27B-GGUF` | local copy, not pinned | `pascal-download-model.sh lmstudio-community/Qwen3.8-27B-GGUF Qwen3.8-27B-Q4_K_M.gguf "$MODEL_DIR/Qwen3.8-27B-Q4_K_M.gguf"` |
@@ -532,10 +576,11 @@ used throughout this guide.
 | Qwen3.6-35B-A3B-Q4_K_M | Standard non-MTP MoE | Candidate (replicated `r=1` screening only) | `Infatoshi/Qwen3.6-35B-A3B-GGUF` | `22880479d6dd057b3fab8654afaaf34648fb524e` | `pascal-download-model.sh Infatoshi/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-Q4_K_M.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-Q4_K_M.gguf" 22880479d6dd057b3fab8654afaaf34648fb524e 439fcb8266f37a035d2192d0fa773e59b177f379bd2bf90976419cea8c7dbb58` |
 | Qwen3.6-35B-A3B-uncensored-heretic-Q4_K_M | Uncensored MoE, no MTP | Verified (64k smoke test, routing profile borrowed from MTP-UD) | `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-GGUF` | `f70be2db155a4192a59c559ece01572f3cd508ab` | `pascal-download-model.sh llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-GGUF Qwen3.6-35B-A3B-uncensored-heretic-Q4_K_M.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Q4_K_M.gguf" f70be2db155a4192a59c559ece01572f3cd508ab b82f9f2155eb9c07139d48cc3a37880cf9d0edcca345ef6ad829b62941ccbb82` |
 | Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M | Uncensored MoE + native MTP; current local test asset | **Verified, locally present** (64k short-prompt, 120k-token 128k capacity test) | `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF` | `fa96dc904fe4dafb415ca707afab30aee2d2e703` | `pascal-download-model.sh llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf" fa96dc904fe4dafb415ca707afab30aee2d2e703 fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781` |
+| Qwen3.8-Flash-Next-UD-IQ3_XXS | 177B `qwen4exp` MoE + phrase-book candidate from the Codacus video | **Experimental**: locally present in HF cache; basic load/generation tested, no stable optimized baseline yet | `unsloth/Qwen3.8-Flash-Next-GGUF` | snapshot `38bb39ee97821de2c9009abb7e93950eec396e66` | `hf download unsloth/Qwen3.8-Flash-Next-GGUF --include "UD-IQ3_XXS/*"`; for future colocated downloads add `--local-dir "$MODEL_DIR/Qwen3.8-Flash-Next-GGUF"` |
 | `mmproj-BF16.gguf` (Unsloth MTP projector) | Vision projector for MTP-UD | Candidate, untested | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` | `5bc3e238d916f48a861bac2f8a1990a0e9b7e98d` | `pascal-download-model.sh unsloth/Qwen3.6-35B-A3B-MTP-GGUF mmproj-BF16.gguf "$MODEL_DIR/mmproj-BF16.gguf" 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d da63cb47a76763c712393f8a017070188a304fa39f8aeea6edc629ed7b975cfa` |
 | `Qwen3.6-35B-A3B-mmproj-BF16.gguf` (standard projector) | Vision projector for the standard model | Candidate, untested | `Infatoshi/Qwen3.6-35B-A3B-GGUF` | `22880479d6dd057b3fab8654afaaf34648fb524e` | `pascal-download-model.sh Infatoshi/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-mmproj-BF16.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-mmproj-BF16.gguf" 22880479d6dd057b3fab8654afaaf34648fb524e 37904b50d3453905e7ef5a4ada6a148bc87ff3923fe1d6c39ae028e53742ff13` |
 | `Qwen3.6-35B-A3B-uncensored-heretic-mmproj-BF16.gguf` | Vision projector for Heretic (no MTP) | Candidate, untested | `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-GGUF` | `f70be2db155a4192a59c559ece01572f3cd508ab` | `pascal-download-model.sh llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-GGUF Qwen3.6-35B-A3B-uncensored-heretic-mmproj-BF16.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-mmproj-BF16.gguf" f70be2db155a4192a59c559ece01572f3cd508ab 1c625f05cd52e90abc76a5f756226c3a5fe279593379c22f6c6846c970a0cd18` |
-| `Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf` | Vision projector for the current local test asset | **Verified, locally present** (downloaded and hash-checked; not yet performance-tested) | `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF` | `fa96dc904fe4dafb415ca707afab30aee2d2e703` | `pascal-download-model.sh llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf" fa96dc904fe4dafb415ca707afab30aee2d2e703 d6050bb82a0187e1b0655f1c5daef60c9479273fbd7402ff25d3137df2e071ce` |
+| `Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf` | Vision projector for the current local test asset | **Verified, locally present**; works with the 64k GPU-offload command using cache `130,108`, and with the CPU-side fallback | `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF` | `fa96dc904fe4dafb415ca707afab30aee2d2e703` | `pascal-download-model.sh llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf "$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf" fa96dc904fe4dafb415ca707afab30aee2d2e703 d6050bb82a0187e1b0655f1c5daef60c9479273fbd7402ff25d3137df2e071ce` |
 
 Expected SHA-256 hashes match [BENCHMARKS_AND_QUALITY.md](BENCHMARKS_AND_QUALITY.md);
 `pascal-download-model.sh` checks them automatically when given as the fifth
@@ -546,6 +591,32 @@ them once the exact upstream source is confirmed. The `hf` CLI documented in
 path when several files must be fetched together in one call; the table above
 uses the single-file `pascal-download-model.sh` fallback bundled with the
 release for hosts without the `hf` tool installed.
+
+### Local presence check (Qwen3.8-Flash-Next HF cache)
+
+The first Qwen3.8-Flash-Next asset downloaded for the `qwen4exp` branch test is
+present in the standard Hugging Face cache, not under `MODEL_DIR`:
+
+```text
+/home/dino/.cache/huggingface/hub/models--unsloth--Qwen3.8-Flash-Next-GGUF/snapshots/38bb39ee97821de2c9009abb7e93950eec396e66/UD-IQ3_XXS/
+```
+
+Use the first shard as the model path:
+
+```bash
+QWEN38_FLASH_MODEL=/home/dino/.cache/huggingface/hub/models--unsloth--Qwen3.8-Flash-Next-GGUF/snapshots/38bb39ee97821de2c9009abb7e93950eec396e66/UD-IQ3_XXS/Qwen3.8-Flash-Next-UD-IQ3_XXS-00001-of-00003.gguf
+```
+
+The adjacent `00002-of-00003` and `00003-of-00003` shards are in the same
+directory and are resolved automatically by llama.cpp. For future downloads
+that should live next to the existing local models, pass an explicit
+`--local-dir`, for example:
+
+```bash
+hf download unsloth/Qwen3.8-Flash-Next-GGUF \
+  --include "UD-IQ3_XXS/*" \
+  --local-dir "$MODEL_DIR/Qwen3.8-Flash-Next-GGUF"
+```
 
 ### Local presence check (Heretic MTP-preserved test asset)
 

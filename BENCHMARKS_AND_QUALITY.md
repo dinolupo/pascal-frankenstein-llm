@@ -126,10 +126,17 @@ for its projector. Verify both before benchmarking.
 
 ## Server starting points
 
-These commands preserve the fastest settings found so far, but their status is
-not identical. The MTP configuration is the operational candidate; the
-standard and Heretic server profiles still need replicated HTTP measurements.
-All commands use one slot and bind only to loopback.
+The authoritative day-to-day commands are kept at the top of
+[MODEL_LOCAL_GUIDE.md](MODEL_LOCAL_GUIDE.md): the Heretic
+`Native-MTP-Preserved` text server at 128k with cache `160,108`, and the
+matching vision server at 64k with GPU projector offload and cache `130,108`.
+Use this file for benchmark protocol and historical comparison; do not treat
+older candidate commands below as preferred launch commands unless a test
+explicitly calls for that model.
+
+All controlled benchmark commands use one slot. Bind to loopback for local
+measurement; use `--host 0.0.0.0` plus a private API key only for remote
+Tailscale use.
 
 ### MTP-UD operational candidate
 

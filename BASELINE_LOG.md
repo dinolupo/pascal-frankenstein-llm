@@ -807,6 +807,53 @@ GPU del test. Il test è riuscito come prova di capacità 128k; la prossima
 prova deve usare un `max_tokens` maggiore per separare reasoning e risposta
 finale e misurare correttamente il comportamento dell'agente.
 
+Comandi operativi recuperati dalla history e promossi a riferimento pratico
+nella guida locale:
+
+```bash
+export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+
+/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  --model /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
+  --api-key 'replace-with-a-long-random-key' \
+  -c 131072 -n 32768 --no-context-shift \
+  -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 160,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning on --reasoning-preserve \
+  --temp 0.6 --top-p 0.95 --top-k 20 \
+  --repeat-penalty 1.0 --presence-penalty 0.0 \
+  --jinja
+```
+
+Per vision, il comando operativo usa il projector BF16 dello stesso checkpoint
+Heretic Native-MTP-Preserved, `--mmproj-offload`, contesto 64k e cache ridotta
+solo su GPU0 (`130,108`) per lasciare spazio al projector:
+
+```bash
+export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+
+/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  --model "$MODEL" --mmproj "$MMPROJ" --mmproj-offload --image-min-tokens 1024 \
+  --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
+  --api-key 'replace-with-a-long-random-key' \
+  -c 65536 -n 32768 --no-context-shift \
+  -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
+  -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
+  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-slots 130,108 \
+  --spec-type draft-mtp --spec-draft-n-max 2 \
+  --reasoning on --reasoning-preserve \
+  --temp 0.6 --top-p 0.95 --top-k 20 \
+  --repeat-penalty 1.0 --presence-penalty 0.0 \
+  --jinja
+```
+
 ### Confronto rapido Heretic 64k: F16 contro Q8 K/V (6 settembre 2026)
 
 Per separare l'effetto del contesto lungo da quello del modello e della KV,
