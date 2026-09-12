@@ -1,0 +1,39 @@
+; Router preset for the Pascal dual-GPU Qwen3.6-35B-A3B profile.
+; This file is an example because the GGUF model remains external.
+; Replace MODEL_PATH with an absolute path before using --models-preset.
+;
+; The packaged routing profile is installed at:
+;   INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
+; Replace INSTALL_DIR with the actual installation directory.
+
+version = 1
+
+[Qwen3.6-35B-heretic]
+model = MODEL_PATH
+alias = qwen36-35b-heretic
+load-on-startup = true
+parallel = 1
+c = 65536
+n = 32768
+no-context-shift = true
+ngl = 99
+ncmoe = 33
+ts = 10,7
+moe-cache-slots = 160,108
+moe-cache-profile = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
+fa = on
+ctk = q8_0
+ctv = q8_0
+b = 512
+ub = 512
+spec-type = draft-mtp
+spec-draft-n-max = 2
+reasoning = on
+reasoning-preserve = true
+temp = 0.6
+top-p = 0.95
+top-k = 20
+repeat-penalty = 1.0
+presence-penalty = 0.0
+jinja = true
+no-ui = true

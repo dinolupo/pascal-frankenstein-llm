@@ -38,7 +38,8 @@ mkdir -p "$package_dir/config" "$package_dir/scripts" "$package_dir/moe-traces"
 cp -a "$bin_dir"/llama-cli "$bin_dir"/llama-server \
     "$bin_dir"/llama-bench "$bin_dir"/llama-moe-trace "$package_dir/bin/"
 cp -a "$bin_dir"/lib*.so* "$package_dir/bin/"
-cp -a "$repo_root/config/qwen.env.example" "$package_dir/config/"
+cp -a "$repo_root/config/qwen.env.example" \
+    "$repo_root/config/llama-models.ini.example" "$package_dir/config/"
 cp -a "$repo_root/scripts/download-model.sh" \
     "$repo_root/scripts/install-local.sh" \
     "$repo_root/scripts/run-qwen.sh" \

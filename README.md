@@ -137,8 +137,9 @@ is not an Unsloth UD quantization.
 
 ### Portable local installation
 
-Release archives include the CUDA binaries, matching MoE profiles, and portable
-helper scripts. GGUF weights remain external. After extracting an archive:
+Release archives include the CUDA binaries, the default Qwen3.6 routing profile,
+a router preset template, and portable helper scripts. GGUF weights remain
+external. After extracting an archive:
 
 Maintainers can package an existing build outside the repository by setting
 `FORK_SOURCE_ROOT` to the corresponding llama.cpp checkout before running
@@ -159,6 +160,49 @@ with an optional pinned revision and SHA-256 check:
 ```bash
 pascal-download-model.sh ORG/REPO model-q4.gguf /models/model-q4.gguf main SHA256
 ```
+
+### Router mode and the packaged MoE profile
+
+The installed default profile is
+`moe-traces/qwen36-35b-mtp-merged.csv`. It is copied into the installation
+directory together with `llama-models.ini.example`; it is not a model weight
+and does not need to be regenerated for the documented Qwen3.6 MTP model.
+
+To use router mode, copy the example preset and replace both placeholders with
+absolute paths. INI presets do not expand `$HOME`, `~`, or shell variables:
+
+```bash
+install_dir="$HOME/.local/share/pascal-frankenstein-llm"
+sed \
+  -e "s|MODEL_PATH|/absolute/path/to/Qwen3.6-35B-A3B-model.gguf|" \
+  -e "s|INSTALL_DIR|$install_dir|" \
+  "$install_dir/config/llama-models.ini.example" \
+  > "$install_dir/config/llama-models.ini"
+
+"$install_dir/bin/llama-server" \
+  --host 127.0.0.1 --port 8001 \
+  --api-key "$LLAMA_API_KEY" \
+  --models-preset "$install_dir/config/llama-models.ini"
+```
+
+Keep model-specific options such as `-ts 10,7`, `--moe-cache-slots 160,108`,
+and `--moe-cache-profile` in the model preset. The router only proxies requests;
+the child server receives these options when the model is loaded. The
+`load-on-startup = true` entry makes VRAM allocation visible immediately.
+
+To generate a replacement profile for a different model or workload, use the
+matching build's `llama-moe-trace` and capture representative prompts:
+
+```bash
+MOE_TRACE_OUT=trace-a.csv "$install_dir/bin/llama-moe-trace" \
+  -m /absolute/path/to/model.gguf -ngl 99 -ncmoe 33 -fa on \
+  -p "representative prompt" -n 512
+```
+
+Run this for contrasting workloads using the same model, then concatenate the
+CSV outputs (omitting duplicate headers if present) and validate the result
+before replacing the packaged profile. A profile is model-specific: do not use
+the Qwen3.6 profile with Qwen3.8 or another architecture.
 
 The release also includes a dependency-light installer smoke test. It uses
 stub executables and never downloads a model:
