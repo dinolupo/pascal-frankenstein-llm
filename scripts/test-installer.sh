@@ -24,17 +24,9 @@ chmod +x "$package_dir/scripts/"*.sh
 printf 'test profile\n' > "$package_dir/moe-traces/qwen36-35b-mtp-merged.csv"
 
 HOME="$home_dir" "$package_dir/scripts/install-local.sh" "$package_dir" "$install_dir"
-config_file="$home_dir/.config/pascal-frankenstein-llm/qwen.env"
-test -f "$config_file"
 test -f "$install_dir/moe-traces/qwen36-35b-mtp-merged.csv"
-test -f "$install_dir/config/llama-models.ini"
-test -L "$home_dir/.local/bin/pascal-run-qwen.sh"
-HOME="$home_dir" QWEN_CONFIG="$config_file" "$install_dir/scripts/verify-install.sh"
-
-printf 'MODEL=/missing/model.gguf\n' >> "$config_file"
-if HOME="$home_dir" QWEN_CONFIG="$config_file" "$install_dir/scripts/verify-install.sh" >/dev/null 2>&1; then
-    printf 'verification unexpectedly accepted a missing model\n' >&2
-    exit 1
-fi
+test -f "$install_dir/config/llama-models.ini.example"
+test ! -e "$home_dir/.config/pascal-frankenstein-llm"
+test ! -e "$home_dir/.local/bin/pascal-run-qwen.sh"
 
 printf 'installer smoke tests passed\n'

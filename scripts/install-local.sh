@@ -13,8 +13,6 @@ fi
 
 source_path=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 install_dir=${2:-"${HOME}/.local/share/pascal-frankenstein-llm"}
-config_dir=${XDG_CONFIG_HOME:-"${HOME}/.config"}/pascal-frankenstein-llm
-bin_dir=${HOME}/.local/bin
 temporary_dir=
 
 cleanup() {
@@ -49,25 +47,10 @@ if [[ ! -f "$profile" ]]; then
     exit 1
 fi
 
-mkdir -p "$install_dir" "$config_dir" "$bin_dir"
+mkdir -p "$install_dir"
 cp -a "$source_path"/. "$install_dir"/
 
-if [[ ! -e "$config_dir/qwen.env" ]]; then
-    cp "$install_dir/config/qwen.env.example" "$config_dir/qwen.env"
-    sed -i "s|^MOE_CACHE_PROFILE=.*|MOE_CACHE_PROFILE=${install_dir}/moe-traces/qwen36-35b-mtp-merged.csv|" \
-        "$config_dir/qwen.env"
-fi
-
-if [[ ! -e "$install_dir/config/llama-models.ini" ]]; then
-    cp "$install_dir/config/llama-models.ini.example" \
-        "$install_dir/config/llama-models.ini"
-fi
-
-for launcher in run-qwen.sh verify-install.sh download-model.sh; do
-    ln -sfn "$install_dir/scripts/$launcher" "$bin_dir/pascal-$launcher"
-done
-
 printf 'Installed to %s\n' "$install_dir"
-printf 'Configuration: %s/qwen.env\n' "$config_dir"
-printf 'Launch with: pascal-run-qwen.sh 64k\n'
-printf 'Ensure %s is in PATH.\n' "$bin_dir"
+printf 'Router template: %s/config/llama-models.ini.example\n' "$install_dir"
+printf 'Routing profile: %s/moe-traces/qwen36-35b-mtp-merged.csv\n' "$install_dir"
+printf 'Binary: %s/bin/llama-server\n' "$install_dir"
