@@ -5,6 +5,13 @@
 ; The packaged routing profile is installed at:
 ;   INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
 ; Replace INSTALL_DIR with the actual installation directory.
+;
+; The optional [Qwen3.6-35B-vision] section below adds a second, separately
+; selectable model (via the "model" field in API requests) that loads the
+; same GGUF plus its matching mmproj projector. Replace MMPROJ_PATH with the
+; absolute path to the projector file that matches MODEL_PATH exactly;
+; projectors are not interchangeable across model builds. See
+; doc/MODEL_LOCAL_GUIDE.md for the validated 64k vision profile.
 
 version = 1
 
@@ -35,5 +42,27 @@ top-p = 0.95
 top-k = 20
 repeat-penalty = 1.0
 presence-penalty = 0.0
+jinja = true
+no-ui = true
+
+[Qwen3.6-35B-vision]
+model = MODEL_PATH
+mmproj = MMPROJ_PATH
+alias = qwen36-35b-a3b-vision
+load-on-startup = false
+parallel = 1
+c = 65536
+ngl = 99
+ncmoe = 33
+ts = 10,7
+moe-cache-slots = 130,108
+moe-cache-profile = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
+mmproj-offload = true
+image-min-tokens = 1024
+fa = on
+ctk = q8_0
+ctv = q8_0
+b = 512
+ub = 512
 jinja = true
 no-ui = true

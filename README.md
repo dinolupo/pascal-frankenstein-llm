@@ -202,6 +202,16 @@ and `--moe-cache-profile` in the model preset. The router only proxies requests;
 the child server receives these options when the model is loaded. The
 `load-on-startup = true` entry makes VRAM allocation visible immediately.
 
+The template also includes an optional `[Qwen3.6-35B-vision]` section that
+loads the same GGUF together with its matching `mmproj` projector, selectable
+independently through the `"model"` field in API requests. Replace
+`MMPROJ_PATH` with the absolute path to the projector file that matches
+`MODEL_PATH` exactly; projectors are not interchangeable across model builds.
+It uses `--moe-cache-slots 130,108` instead of `160,108` because the
+GPU-offloaded projector needs extra VRAM on CUDA0. See
+[`doc/MODEL_LOCAL_GUIDE.md`](doc/MODEL_LOCAL_GUIDE.md) for the validated 64k
+vision profile and its CPU-side-projector fallback.
+
 To generate a replacement profile for a different model or workload, use the
 matching build's `llama-moe-trace` and capture representative prompts:
 
