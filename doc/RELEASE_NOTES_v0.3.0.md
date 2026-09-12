@@ -30,7 +30,10 @@ on the validation host.
 ## Installation
 
 ```bash
-./scripts/install-local.sh pascal-frankenstein-llm-v0.3.0-linux-x86_64-cuda12-sm61.tar.gz
+tar -xzf pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61.tar.gz
+cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
+./scripts/install-local.sh .
+cd -
 $EDITOR ~/.config/pascal-frankenstein-llm/qwen.env
 pascal-verify-install.sh
 pascal-run-qwen.sh 64k

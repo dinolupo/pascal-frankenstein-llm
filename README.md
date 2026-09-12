@@ -141,14 +141,18 @@ is not an Unsloth UD quantization.
 
 Release archives include the CUDA binaries, the default Qwen3.6 routing profile,
 a router preset template, and portable helper scripts. GGUF weights remain
-external. After extracting an archive:
+external. The installer script is inside the archive, so extract the archive
+before running it:
 
 Maintainers can package an existing build outside the repository by setting
 `FORK_SOURCE_ROOT` to the corresponding llama.cpp checkout before running
 `scripts/package-linux-release.sh`.
 
 ```bash
+tar -xzf pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61.tar.gz
+cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
 ./scripts/install-local.sh .
+cd -
 ${EDITOR:-vi} ~/.config/pascal-frankenstein-llm/qwen.env
 pascal-verify-install.sh
 pascal-run-qwen.sh 64k
