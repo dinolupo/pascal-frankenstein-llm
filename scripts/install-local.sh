@@ -13,6 +13,7 @@ fi
 
 source_path=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 install_dir=${2:-"${HOME}/.local/share/pascal-frankenstein-llm"}
+link_dir="${HOME}/.local/bin"
 temporary_dir=
 
 cleanup() {
@@ -48,9 +49,25 @@ if [[ ! -f "$profile" ]]; then
 fi
 
 mkdir -p "$install_dir"
+install_dir=$(cd "$install_dir" && pwd)
 cp -a "$source_path"/. "$install_dir"/
+
+mkdir -p "$link_dir"
+for executable in llama-cli llama-server llama-bench llama-moe-trace; do
+    link_path="$link_dir/$executable"
+    target_path="$install_dir/bin/$executable"
+    if [[ -L "$link_path" && "$(readlink -f "$link_path")" == "$target_path" ]]; then
+        continue
+    fi
+    if [[ -e "$link_path" || -L "$link_path" ]]; then
+        printf 'refusing to replace existing path: %s\n' "$link_path" >&2
+        exit 1
+    fi
+    ln -s "$target_path" "$link_path"
+done
 
 printf 'Installed to %s\n' "$install_dir"
 printf 'Router template: %s/config/llama-models.ini.example\n' "$install_dir"
 printf 'Routing profile: %s/moe-traces/qwen36-35b-mtp-merged.csv\n' "$install_dir"
 printf 'Binary: %s/bin/llama-server\n' "$install_dir"
+printf 'User command links: %s\n' "$link_dir"

@@ -27,6 +27,10 @@ test -f "$install_dir/moe-traces/qwen36-35b-mtp-merged.csv"
 test -f "$install_dir/config/llama-models.ini.example"
 test ! -e "$home_dir/.config/pascal-frankenstein-llm"
 test ! -e "$home_dir/.local/bin/pascal-run-qwen.sh"
+for executable in llama-cli llama-server llama-bench llama-moe-trace; do
+    test -L "$home_dir/.local/bin/$executable"
+    test "$(readlink -f "$home_dir/.local/bin/$executable")" = "$install_dir/bin/$executable"
+done
 HOME="$home_dir" "$install_dir/scripts/verify-install.sh"
 
 printf 'installer smoke tests passed\n'

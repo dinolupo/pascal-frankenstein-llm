@@ -156,10 +156,11 @@ cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
 ${EDITOR:-vi} config/llama-models.ini.example
 ```
 
-The installer only copies the package to
-`~/.local/share/pascal-frankenstein-llm` by default. It does not create shell
-configuration, symlinks, or start a server. The router preset is the only
-model configuration:
+The installer copies the package to
+`~/.local/share/pascal-frankenstein-llm` by default and creates user-local
+links for the four llama commands in `~/.local/bin`. It does not create shell
+configuration or start a server. Existing conflicting files are never
+overwritten. The router preset is the only model configuration:
 
 ```bash
 install_dir="$HOME/.local/share/pascal-frankenstein-llm"
@@ -170,11 +171,11 @@ ${EDITOR:-vi} "$install_dir/config/llama-models.ini"
 Edit `MODEL_PATH` and `INSTALL_DIR` directly in the copied INI. No shell
 variables are expanded by the INI parser.
 
-The binaries are therefore not installed as global commands. `~/.local/bin`
-may already exist and may be included in `PATH` on Ubuntu or Linux Mint, but
-this package does not put links there. Start the server with its absolute path
-as shown below, or create your own links only if you explicitly want
-system-wide command-style access.
+On Ubuntu and Linux Mint, `~/.local/bin` commonly exists and is commonly
+included in the user's `PATH`, but this depends on the desktop/session setup.
+The installer creates the directory when needed. If it is not in `PATH`, use
+the absolute paths under `~/.local/share/pascal-frankenstein-llm/bin` or add
+`~/.local/bin` to the user's shell configuration.
 
 ### Router mode and the packaged MoE profile
 

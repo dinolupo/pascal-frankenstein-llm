@@ -29,9 +29,11 @@ on the validation host.
 
 The complete, authoritative installation and router startup procedure is in
 the repository [README.md](../README.md). It covers checksum verification,
-archive extraction, the copy-only installer, the router INI, and the direct
+archive extraction, the installer, the router INI, and the direct
 `llama-server --models-preset` command. The release package does not create
-shell configuration or launcher links.
+shell configuration or start a server. It also creates non-prefixed user-local
+links (`llama-server`, `llama-cli`, `llama-bench`, and `llama-moe-trace`) in
+`~/.local/bin`, without overwriting conflicting existing paths.
 
 ## Validation
 
