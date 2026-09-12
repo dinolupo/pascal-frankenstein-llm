@@ -163,10 +163,18 @@ model configuration:
 
 ```bash
 install_dir="$HOME/.local/share/pascal-frankenstein-llm"
-cp "$install_dir/config/llama-models.ini.example" \
-   "$install_dir/config/llama-models.ini"
+cp "$install_dir/config/llama-models.ini.example" "$install_dir/config/llama-models.ini"
 ${EDITOR:-vi} "$install_dir/config/llama-models.ini"
 ```
+
+Edit `MODEL_PATH` and `INSTALL_DIR` directly in the copied INI. No shell
+variables are expanded by the INI parser.
+
+The binaries are therefore not installed as global commands. `~/.local/bin`
+may already exist and may be included in `PATH` on Ubuntu or Linux Mint, but
+this package does not put links there. Start the server with its absolute path
+as shown below, or create your own links only if you explicitly want
+system-wide command-style access.
 
 ### Router mode and the packaged MoE profile
 
@@ -175,16 +183,12 @@ The installed default profile is
 directory together with `llama-models.ini.example`; it is not a model weight
 and does not need to be regenerated for the documented Qwen3.6 MTP model.
 
-To use router mode, replace `MODEL_PATH` and `INSTALL_DIR` with absolute paths.
-INI presets do not expand `$HOME`, `~`, or shell variables:
+To use router mode, replace `MODEL_PATH` and `INSTALL_DIR` with absolute paths
+in the copied INI. INI presets do not expand `$HOME`, `~`, or shell variables:
 
 ```bash
 install_dir="$HOME/.local/share/pascal-frankenstein-llm"
-sed \
-  -e "s|MODEL_PATH|/absolute/path/to/Qwen3.6-35B-A3B-model.gguf|" \
-  -e "s|INSTALL_DIR|$install_dir|" \
-  "$install_dir/config/llama-models.ini.example" \
-  > "$install_dir/config/llama-models.ini"
+${EDITOR:-vi} "$install_dir/config/llama-models.ini"
 
 "$install_dir/bin/llama-server" \
   --models-preset "$install_dir/config/llama-models.ini" \
