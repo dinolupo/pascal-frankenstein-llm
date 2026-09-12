@@ -16,9 +16,8 @@ for executable in llama-cli llama-server llama-bench llama-moe-trace; do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$package_dir/bin/$executable"
     chmod +x "$package_dir/bin/$executable"
 done
-cp "$root_dir/config/qwen.env.example" "$package_dir/config/"
 cp "$root_dir/config/llama-models.ini.example" "$package_dir/config/"
-cp "$root_dir/scripts"/{download-model.sh,install-local.sh,run-qwen.sh,verify-install.sh} \
+cp "$root_dir/scripts"/{download-model.sh,install-local.sh,verify-install.sh} \
     "$package_dir/scripts/"
 chmod +x "$package_dir/scripts/"*.sh
 printf 'test profile\n' > "$package_dir/moe-traces/qwen36-35b-mtp-merged.csv"
@@ -28,5 +27,6 @@ test -f "$install_dir/moe-traces/qwen36-35b-mtp-merged.csv"
 test -f "$install_dir/config/llama-models.ini.example"
 test ! -e "$home_dir/.config/pascal-frankenstein-llm"
 test ! -e "$home_dir/.local/bin/pascal-run-qwen.sh"
+HOME="$home_dir" "$install_dir/scripts/verify-install.sh"
 
 printf 'installer smoke tests passed\n'

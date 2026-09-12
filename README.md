@@ -152,19 +152,20 @@ Maintainers can package an existing build outside the repository by setting
 tar -xzf pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61.tar.gz
 cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
 ./scripts/install-local.sh .
-cd -
-${EDITOR:-vi} ~/.config/pascal-frankenstein-llm/qwen.env
-pascal-verify-install.sh
-pascal-run-qwen.sh 64k
+./scripts/verify-install.sh
+${EDITOR:-vi} config/llama-models.ini.example
 ```
 
-The launcher sets `LD_LIBRARY_PATH` itself and supports `64k`, `128k`, and
-`remote` modes. The configuration contains only local paths and is preserved
-when the same installation directory is upgraded. Models can be downloaded
-with an optional pinned revision and SHA-256 check:
+The installer only copies the package to
+`~/.local/share/pascal-frankenstein-llm` by default. It does not create shell
+configuration, symlinks, or start a server. The router preset is the only
+model configuration:
 
 ```bash
-pascal-download-model.sh ORG/REPO model-q4.gguf /models/model-q4.gguf main SHA256
+install_dir="$HOME/.local/share/pascal-frankenstein-llm"
+cp "$install_dir/config/llama-models.ini.example" \
+   "$install_dir/config/llama-models.ini"
+${EDITOR:-vi} "$install_dir/config/llama-models.ini"
 ```
 
 ### Router mode and the packaged MoE profile
@@ -174,8 +175,8 @@ The installed default profile is
 directory together with `llama-models.ini.example`; it is not a model weight
 and does not need to be regenerated for the documented Qwen3.6 MTP model.
 
-To use router mode, copy the example preset and replace both placeholders with
-absolute paths. INI presets do not expand `$HOME`, `~`, or shell variables:
+To use router mode, replace `MODEL_PATH` and `INSTALL_DIR` with absolute paths.
+INI presets do not expand `$HOME`, `~`, or shell variables:
 
 ```bash
 install_dir="$HOME/.local/share/pascal-frankenstein-llm"
@@ -186,9 +187,9 @@ sed \
   > "$install_dir/config/llama-models.ini"
 
 "$install_dir/bin/llama-server" \
+  --models-preset "$install_dir/config/llama-models.ini" \
   --host 127.0.0.1 --port 8001 \
-  --api-key "$LLAMA_API_KEY" \
-  --models-preset "$install_dir/config/llama-models.ini"
+  --api-key "$LLAMA_API_KEY"
 ```
 
 Keep model-specific options such as `-ts 10,7`, `--moe-cache-slots 160,108`,

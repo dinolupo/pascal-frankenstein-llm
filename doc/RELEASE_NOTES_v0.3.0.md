@@ -13,9 +13,7 @@ on the validation host.
 - CUDA 12 `sm_61` release binaries and MoE routing profiles.
 - Packaged Qwen3.6 router preset template and default MTP routing profile.
 - Pi agent integration instructions for an OpenAI-compatible local endpoint.
-- Local configuration under `~/.config/pascal-frankenstein-llm/qwen.env`.
-- Launch modes for 64k, 128k, and Tailscale/remote serving.
-- Installation and upgrade script that preserves user configuration.
+- Transparent copy-only installer.
 - NVIDIA/runtime verification helper.
 - Hugging Face downloader with optional revision and SHA-256 verification.
 - Installer smoke test that does not require model weights or a GPU.
@@ -33,20 +31,17 @@ on the validation host.
 tar -xzf pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61.tar.gz
 cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
 ./scripts/install-local.sh .
-cd -
-$EDITOR ~/.config/pascal-frankenstein-llm/qwen.env
-pascal-verify-install.sh
-pascal-run-qwen.sh 64k
+./scripts/verify-install.sh
+cp ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini.example \
+   ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini
+$EDITOR ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini
 ```
 
-Set `MODEL` to an existing external GGUF file. Use `pascal-run-qwen.sh 128k`
-only after confirming that the host has enough free VRAM and RAM.
-
-For router mode, after installation copy
-`config/llama-models.ini.example` to `config/llama-models.ini` and replace its
-`MODEL_PATH` and `INSTALL_DIR` placeholders with absolute paths. The packaged
-profile is installed at `moe-traces/qwen36-35b-mtp-merged.csv`. INI files do
-not expand shell variables such as `$HOME`.
+The installer only copies files and does not create shell configuration, links,
+or start a server. Replace `MODEL_PATH` and `INSTALL_DIR` in the INI with
+absolute paths. The packaged profile is installed at
+`moe-traces/qwen36-35b-mtp-merged.csv`. INI files do not expand shell
+variables such as `$HOME`.
 
 ## Validation
 

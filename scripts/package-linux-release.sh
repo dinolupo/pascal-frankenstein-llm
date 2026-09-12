@@ -38,12 +38,9 @@ mkdir -p "$package_dir/config" "$package_dir/scripts" "$package_dir/moe-traces"
 cp -a "$bin_dir"/llama-cli "$bin_dir"/llama-server \
     "$bin_dir"/llama-bench "$bin_dir"/llama-moe-trace "$package_dir/bin/"
 cp -a "$bin_dir"/lib*.so* "$package_dir/bin/"
-cp -a "$repo_root/config/qwen.env.example" \
-    "$repo_root/config/llama-models.ini.example" "$package_dir/config/"
+cp -a "$repo_root/config/llama-models.ini.example" "$package_dir/config/"
 cp -a "$repo_root/scripts/download-model.sh" \
     "$repo_root/scripts/install-local.sh" \
-    "$repo_root/scripts/run-qwen.sh" \
-    "$repo_root/scripts/test-installer.sh" \
     "$repo_root/scripts/verify-install.sh" "$package_dir/scripts/"
 cp -a "$repo_root/moe-traces"/qwen36-35b-merged.csv \
     "$repo_root/moe-traces"/qwen36-35b-mtp-merged.csv "$package_dir/moe-traces/"
@@ -78,9 +75,9 @@ fi
     printf '%s\n' '  - NVIDIA Pascal sm_61 target; no GGUF model weights are included.'
     printf '\nUsage after extraction:\n'
     printf '%s\n' '  ./scripts/install-local.sh .'
-    printf '%s\n' '  $EDITOR ~/.config/pascal-frankenstein-llm/qwen.env'
-    printf '%s\n' '  pascal-verify-install.sh'
-    printf '%s\n' '  pascal-run-qwen.sh 64k'
+    printf '%s\n' '  cp config/llama-models.ini.example config/llama-models.ini'
+    printf '%s\n' '  $EDITOR config/llama-models.ini'
+    printf '%s\n' '  ./bin/llama-server --models-preset config/llama-models.ini'
     } > "$package_dir/README.txt"
 
 for executable in llama-cli llama-server llama-bench llama-moe-trace; do

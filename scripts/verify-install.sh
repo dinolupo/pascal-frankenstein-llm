@@ -3,7 +3,6 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root_dir=$(cd "$script_dir/.." && pwd)
-config_file=${QWEN_CONFIG:-"${XDG_CONFIG_HOME:-"${HOME}/.config"}/pascal-frankenstein-llm/qwen.env"}
 
 for required in llama-cli llama-server llama-bench llama-moe-trace; do
     [[ -x "$root_dir/bin/$required" ]] || {
@@ -12,17 +11,15 @@ for required in llama-cli llama-server llama-bench llama-moe-trace; do
     }
 done
 
-[[ -f "$config_file" ]] || {
-    printf 'missing configuration: %s\n' "$config_file" >&2
+[[ -f "$root_dir/config/llama-models.ini.example" ]] || {
+    printf 'missing router preset template: %s\n' "$root_dir/config/llama-models.ini.example" >&2
     exit 1
 }
-# shellcheck disable=SC1090
-source "$config_file"
 
-if [[ -n "${MODEL:-}" && ! -f "$MODEL" ]]; then
-    printf 'configured MODEL does not exist: %s\n' "$MODEL" >&2
+[[ -f "$root_dir/moe-traces/qwen36-35b-mtp-merged.csv" ]] || {
+    printf 'missing default routing profile: %s\n' "$root_dir/moe-traces/qwen36-35b-mtp-merged.csv" >&2
     exit 1
-fi
+}
 
 if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
@@ -31,3 +28,5 @@ else
 fi
 
 printf 'Installation looks complete: %s\n' "$root_dir"
+printf 'Edit the router preset before starting llama-server: %s\n' \
+    "$root_dir/config/llama-models.ini.example"
