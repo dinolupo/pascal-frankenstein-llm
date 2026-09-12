@@ -49,7 +49,7 @@ context shifting:
 export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
 MODEL=/path/to/qwen35b-mtp.gguf
 
-$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+$LD_LIBRARY_PATH/llama-server \
   --model "$MODEL" \
   --host 127.0.0.1 --port 8001 --alias qwen36-35b-a3b --parallel 1 \
   -c 131072 -n 32768 --no-context-shift \
@@ -460,49 +460,6 @@ WebUI to the same endpoint. A coding-agent setup can use:
 Pi Coding Agent -> llama-server
 Open WebUI -> llama-server or an OpenAI-compatible agent gateway
 ```
-
-## Pi Coding Agent
-
-Pi can use an OpenAI-compatible local provider. A cautious starting
-configuration is:
-
-```json
-{
-  "providers": {
-    "local": {
-      "baseUrl": "http://127.0.0.1:8001/v1",
-      "api": "openai-completions",
-      "apiKey": "local",
-      "models": [
-        {
-          "id": "qwen36-35b-a3b",
-          "name": "Qwen 35B-class MTP",
-          "reasoning": true,
-          "input": ["text"],
-          "contextWindow": 131072,
-          "maxTokens": 32768,
-          "compat": {
-            "supportsDeveloperRole": false,
-            "supportsReasoningEffort": false
-          }
-        }
-      ]
-    }
-  }
-}
-```
-
-Validate these behaviors with real tasks:
-
-- structured tool calls;
-- file reads and edits;
-- controlled shell commands;
-- preserved reasoning across turns;
-- compliance with a `plan-first` skill;
-- final answer separated from reasoning.
-
-The `plan-first` skill is workflow policy, not a model-speed optimization. Test
-it in a temporary workspace before using it on important repositories.
 
 ## Verified and candidate models
 
