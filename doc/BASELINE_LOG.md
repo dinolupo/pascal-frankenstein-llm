@@ -77,7 +77,7 @@ diagnostici e non vengono usati come baseline finale.
 - Configurazione riproducibile:
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm/llama.cpp
+cd $HOME/pascal-frankenstein-llm/llama.cpp
 cmake -S . -B build-pascal-cuda -G Ninja \
   -DGGML_CUDA=ON \
   -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.9/bin/nvcc \
@@ -111,7 +111,7 @@ ubatch 512, 4 thread CPU, KV f16 e Flash Attention `auto` (default). I test
 Comando finale del benchmark:
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm
+cd $HOME/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-bench \
   -m /mnt/e/lmstudio-models/lmstudio-community/Qwen3.8-27B-GGUF/Qwen3.8-27B-Q4_K_M.gguf \
   -ngl 999 -p 512 -n 128 -r 3
@@ -151,7 +151,7 @@ KV f16, Flash Attention `on`, batch/ubatch default 2048/512, thread server
 automatici e bind esclusivamente loopback.
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm
+cd $HOME/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-server \
   -m /mnt/e/lmstudio-models/lmstudio-community/Qwen3.8-27B-GGUF/Qwen3.8-27B-Q4_K_M.gguf \
   -c 16384 --parallel 1 -ngl 999 \
@@ -196,7 +196,7 @@ quindi un profilo stabile.
 Modello standard usato per baseline e cache:
 
 ```text
-/home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf
+$HOME/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf
 ```
 
 - 19,70 GiB, 34,66 B parametri;
@@ -206,7 +206,7 @@ Modello standard usato per baseline e cache:
 Profilo routing standard unificato, 320 token di decode coding+chat:
 
 ```text
-/home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv
+$HOME/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv
 ```
 
 SHA-256:
@@ -240,15 +240,15 @@ Comandi riproducibili:
 ```bash
 # Baseline senza cache
 ./llama.cpp/build-pascal-cuda/bin/llama-bench \
-  -m /home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
+  -m $HOME/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
   -ngl 99 -ncmoe 99 -ts 10/7 -fa on \
   -p 512 -n 128 -r 3
 
 # Stessa configurazione, unica variabile: cache 112
-GGML_MOE_CACHE_PROFILE=/home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv \
+GGML_MOE_CACHE_PROFILE=$HOME/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv \
 GGML_MOE_CACHE_SLOTS=112 \
 ./llama.cpp/build-pascal-cuda/bin/llama-bench \
-  -m /home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
+  -m $HOME/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
   -ngl 99 -ncmoe 99 -ts 10/7 -fa on \
   -p 512 -n 128 -r 3
 ```
@@ -332,12 +332,12 @@ grandezza e non e' il candidato Pascal piu' veloce tra quelli provati.
 Il server pratico usa cache88 per lasciare margine a context e compute buffer:
 
 ```bash
-cd /home/dino/pascal-frankenstein-llm
+cd $HOME/pascal-frankenstein-llm
 ./llama.cpp/build-pascal-cuda/bin/llama-server \
-  -m /home/dino/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
+  -m $HOME/llm-models/pascal-tests/Qwen3.6-35B-A3B-Q4_K_M.gguf \
   -c 16384 --parallel 1 \
   -ngl 99 -ncmoe 99 -ts 10,7 -fa on \
-  --moe-cache-profile /home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv \
+  --moe-cache-profile $HOME/pascal-frankenstein-llm/moe-traces/qwen36-35b-merged.csv \
   --moe-cache-slots 88 \
   --host 127.0.0.1 --port 18081 --jinja --no-webui
 ```
@@ -672,7 +672,7 @@ servono sempre throughput, acceptance e correttezza/qualita'.
 
 ### Smoke test modello alternativo: Heretic Q4_K_M (3 settembre 2026)
 
-Scaricato in `/home/dino/llm-models/pascal-tests/` il GGUF
+Scaricato in `$HOME/llm-models/pascal-tests/` il GGUF
 `llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-GGUF`, file
 `Qwen3.6-35B-A3B-uncensored-heretic-Q4_K_M.gguf` (20 GiB). Un tentativo con
 MTP `n-max 2` si e' fermato correttamente in caricamento: il GGUF non espone
@@ -696,13 +696,13 @@ installato localmente i binari della release
 `v0.1.0-pascal-cuda12-sm61`; il comando funzionante corrente usa il binario:
 
 ```text
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server
 ```
 
 L'ultimo modello scaricato e funzionante e':
 
 ```text
-/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
 ```
 
 SHA-256 verificato:
@@ -712,16 +712,16 @@ fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781
 ```
 
 Il profilo routing resta quello v1 gia' versionato; il suo percorso assoluto nel
-comando seguente presuppone il checkout `/home/dino/pascal-frankenstein-llm`.
+comando seguente presuppone il checkout `$HOME/pascal-frankenstein-llm`.
 
 Comando funzionante riferito dall'utente:
 
 ```bash
 ~/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
-  -m /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  -m $HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
   -c 65536 -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk f16 -ctv f16 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/pascal-frankenstein-llm/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --temp 0.7 --seed 123
@@ -740,7 +740,7 @@ Stato hardware al 6 settembre 2026, prima del test:
 - GTX 1070: P8, 9 MiB occupati su 8.192 MiB;
 - sulla GTX 1080 Ti restano processi grafici desktop/Xorg, Cinnamon e Firefox;
 - il binario della release resta quello verificato:
-  `/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server`.
+  `$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server`.
 
 ### Linux Mint nativo: prova reale a 128k (6 settembre 2026)
 
@@ -757,15 +757,15 @@ benchmark. Il test valido ha usato il profilo presente nel worktree corrente,
 un solo slot e la configurazione seguente:
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
-  --model /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+  --model $HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
   --port 8001 --alias qwen36-35b-a3b --parallel 1 \
   -c 131072 -n 32768 --no-context-shift \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --reasoning-preserve \
@@ -801,7 +801,7 @@ osservato è stato circa 74--75 °C sulla 1080 Ti e 55--60 °C sulla 1070; la
 circa 16,8 GiB RSS; il sistema ha mantenuto circa 1,4 GiB di swap occupata.
 
 I log completi sono conservati localmente in
-`/home/dino/pascal-test-logs/`, incluso il log server
+`$HOME/pascal-test-logs/`, incluso il log server
 `20260906-163525-128k-server.log`, la richiesta/risposta HTTP e il campione
 GPU del test. Il test è riuscito come prova di capacità 128k; la prossima
 prova deve usare un `max_tokens` maggiore per separare reasoning e risposta

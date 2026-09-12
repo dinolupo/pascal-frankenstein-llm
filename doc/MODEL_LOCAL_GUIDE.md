@@ -34,14 +34,14 @@ Use its matching projector for vision:
 ### Binary and routing profile
 
 ```text
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server
-/home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server
+$HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv
 ```
 
 The release requires:
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
 ```
 
 ## Authoritative working commands
@@ -62,16 +62,17 @@ shifting, with 153.77 prompt t/s, 23.62 generation t/s, and 72.8% MTP
 acceptance.
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
-  --model /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+$LD_LIBRARY_PATH/llama-server \
+  --model "$MODEL" \
   --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
   --api-key 'replace-with-a-long-random-key' \
   -c 131072 -n 32768 --no-context-shift \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --reasoning-preserve \
@@ -141,17 +142,17 @@ same matching projector with `--no-mmproj-offload`. This keeps the full
 processing is much slower.
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
-MODEL=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
-MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+MMPROJ=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
   --model "$MODEL" --mmproj "$MMPROJ" --no-mmproj-offload --image-min-tokens 1024 \
   --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
   --api-key 'replace-with-a-long-random-key' -c 16384 -n 4096 \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --reasoning-preserve \
@@ -188,17 +189,17 @@ full 64k context, matching the remote profile originally used to start a
 session (`-c 65536 -n 32768 --no-context-shift`, `--host 0.0.0.0`):
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
-MODEL=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
-MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+MMPROJ=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
   --model "$MODEL" --mmproj "$MMPROJ" --no-mmproj-offload --image-min-tokens 1024 \
   --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
   --api-key 'replace-with-a-long-random-key' -c 65536 -n 32768 --no-context-shift \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 160,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --reasoning-preserve \
@@ -288,17 +289,17 @@ Findings:
   benchmark.
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
-MODEL=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
-MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf
+MMPROJ=$HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
   --model "$MODEL" --mmproj "$MMPROJ" --mmproj-offload --image-min-tokens 1024 \
   --host 0.0.0.0 --port 8001 --alias qwen36-heretic --parallel 1 \
   --api-key 'replace-with-a-long-random-key' -c 65536 -n 32768 --no-context-shift \
   -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
   -ctk q8_0 -ctv q8_0 -b 512 -ub 512 \
-  --moe-cache-profile /home/dino/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
+  --moe-cache-profile $HOME/proj/pascal-frankenstein-llm.worktrees/progetto-situazione-attuale/moe-traces/qwen36-35b-mtp-merged.csv \
   --moe-cache-slots 130,108 \
   --spec-type draft-mtp --spec-draft-n-max 2 \
   --reasoning on --reasoning-preserve \
@@ -499,49 +500,6 @@ Pi Coding Agent -> llama-server
 Open WebUI -> llama-server or an OpenAI-compatible agent gateway
 ```
 
-## Pi Coding Agent
-
-Pi can use an OpenAI-compatible local provider. A cautious starting
-configuration is:
-
-```json
-{
-  "providers": {
-    "local": {
-      "baseUrl": "http://127.0.0.1:8001/v1",
-      "api": "openai-completions",
-      "apiKey": "local",
-      "models": [
-        {
-          "id": "qwen36-35b-a3b",
-          "name": "Qwen 35B-class MTP",
-          "reasoning": true,
-          "input": ["text"],
-          "contextWindow": 131072,
-          "maxTokens": 32768,
-          "compat": {
-            "supportsDeveloperRole": false,
-            "supportsReasoningEffort": false
-          }
-        }
-      ]
-    }
-  }
-}
-```
-
-Validate these behaviors with real tasks:
-
-- structured tool calls;
-- file reads and edits;
-- controlled shell commands;
-- preserved reasoning across turns;
-- compliance with a `plan-first` skill;
-- final answer separated from reasoning.
-
-The `plan-first` skill is workflow policy, not a model-speed optimization. Test
-it in a temporary workspace before using it on important repositories.
-
 ## Verified and candidate models
 
 This table tracks which GGUF assets have been run on this hardware and which
@@ -621,12 +579,12 @@ hf download unsloth/Qwen3.8-Flash-Next-GGUF \
 ### Local presence check (Heretic MTP-preserved test asset)
 
 The model file and its projector are now confirmed present under
-`/home/dino/proj/genAI/models/` and hash-verified against the values above:
+`$HOME/proj/genAI/models/` and hash-verified against the values above:
 
 ```bash
 sha256sum \
-  /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
-  /home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
+  $HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf \
+  $HOME/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf
 ```
 
 The projector was missing locally before this check and was fetched with the
@@ -654,12 +612,12 @@ photos). None of these are run automatically here; they would each require
 downloading their own dataset and scoring harness.
 
 ```bash
-export LD_LIBRARY_PATH=/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
-MODEL_DIR=/home/dino/proj/genAI/models
+export LD_LIBRARY_PATH=$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin
+MODEL_DIR=$HOME/proj/genAI/models
 MODEL="$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf"
 MMPROJ="$MODEL_DIR/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf"
 
-/home/dino/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
+$HOME/proj/pascal-frankenstein-llm-v0.1.0-linux-x86_64-cuda12-sm61/bin/llama-server \
   --model "$MODEL" --mmproj "$MMPROJ" --mmproj-offload \
   --host 0.0.0.0 --port 8002 --alias qwen36-35b-a3b-vision --parallel 1 \
   -c 16384 -ngl 99 -ncmoe 33 -ts 10,7 -fa on \
