@@ -27,25 +27,15 @@ on the validation host.
 
 ## Installation
 
-```bash
-tar -xzf pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61.tar.gz
-cd pascal-frankenstein-llm-0.3.0-linux-x86_64-cuda12-sm61
-./scripts/install-local.sh .
-./scripts/verify-install.sh
-cp ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini.example \
-   ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini
-$EDITOR ~/.local/share/pascal-frankenstein-llm/config/llama-models.ini
-```
-
-The installer only copies files and does not create shell configuration, links,
-or start a server. Replace `MODEL_PATH` and `INSTALL_DIR` in the INI with
-absolute paths. The packaged profile is installed at
-`moe-traces/qwen36-35b-mtp-merged.csv`. INI files do not expand shell
-variables such as `$HOME`.
+The complete, authoritative installation and router startup procedure is in
+the repository [README.md](../README.md). It covers checksum verification,
+archive extraction, the copy-only installer, the router INI, and the direct
+`llama-server --models-preset` command. The release package does not create
+shell configuration or launcher links.
 
 ## Validation
 
 The native host validation covers archive checksum, extraction, installation,
-configuration creation, launcher links, GPU discovery, and missing-model
-failure handling. Throughput and correctness measurements remain documented in
+router template and profile presence, GPU discovery, and router preset parsing.
+Throughput and correctness measurements remain documented in
 [`BASELINE_LOG.md`](BASELINE_LOG.md); they are not release guarantees.
