@@ -21,11 +21,25 @@ export LLAMA_API_KEY=changethisverylongboringkey
 export install_dir="$HOME/.local/share/pascal-frankenstein-llm"
 ```
 
-> Run with INI configuration (SANDBOX with `nono.sh` current directory)
+> Run LLAMA.CPP with INI configuration
+
+```sh
+llama-server \
+  --models-preset "$install_dir/config/llama-models.ini" \
+  --host $LLAMA_IP \
+  --port $LLAMA_PORT \
+  --api-key "$LLAMA_API_KEY"
+```
+
+> Run pi.dev with SANDBOX `nono.sh` in current directory
 
 ```sh
 nono run --profile nolabs-ai/pi --allow . -- pi
 ```
+
+## ANNEX
+
+### First configuration of `nono.sh` sandbox permissions for `pi.dev`
 
 The official `nolabs-ai/pi` profile assumes Pi's binary is in a standard
 location (system Node or `~/.nvm`). If `pi.dev/install.sh` bootstrapped its
@@ -70,17 +84,7 @@ nono run --profile pi --allow-cwd -- pi
 Skip this if `command -v pi` resolves outside `~/.local/share/pi-node` on
 your machine.
 
-> Run with INI configuration (DANGEROUS FULL SYSTEM CONTROL)
-
-```sh
-llama-server \
-  --models-preset "$install_dir/config/llama-models.ini" \
-  --host $LLAMA_IP \
-  --port $LLAMA_PORT \
-  --api-key "$LLAMA_API_KEY"
-```
-
-> sample INI
+### Sample INI for llama.cpp
 
 ```ini
 ; Router preset for the Pascal dual-GPU Qwen3.6-35B-A3B profile.
