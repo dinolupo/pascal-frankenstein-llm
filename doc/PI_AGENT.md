@@ -37,6 +37,30 @@ llama-server \
 nono run --profile nolabs-ai/pi --allow . -- pi
 ```
 
+### Temporary chat-template experiment
+
+On 13 September 2026, Pi.dev entered a reasoning loop during local-agent
+testing. As a temporary diagnostic, the model configuration was overridden
+with the fixed Qwen Jinja template from
+[froggeric/Qwen-Fixed-Chat-Templates](https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates).
+The repository describes the template as a drop-in replacement for Qwen 3.5,
+3.6, 3.8, and 3.8 Flash-Next templates, and recommends extracting reasoning
+with the DeepSeek format when using `llama-server`.
+
+The temporary `llama-server` override is:
+
+```sh
+llama-server \
+  --models-preset "$install_dir/config/llama-models.ini" \
+  --chat-template-file "$HOME/path/to/chat_template.jinja" \
+  --reasoning-format deepseek
+```
+
+The temporary test succeeded: with this override Pi.dev no longer enters the
+reasoning loop during the tested workflow. Keep the template override
+temporary until it has been exercised across more agent tasks and its output
+format has been checked, but retain it as the current workaround.
+
 ## ANNEX
 
 ### First configuration of `nono.sh` sandbox permissions for `pi.dev`

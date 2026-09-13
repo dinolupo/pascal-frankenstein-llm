@@ -854,6 +854,33 @@ MMPROJ=/home/dino/proj/genAI/models/Qwen3.6-35B-A3B-uncensored-heretic-Native-MT
   --jinja
 ```
 
+### Esperimento template Qwen alternativo per loop di Pi Agent (13 settembre 2026)
+
+Durante prove locali con Pi.dev, l'agente è entrato in un loop nel reasoning.
+Come prova temporanea è stato scaricato il template Jinja pubblicato da
+[froggeric/Qwen-Fixed-Chat-Templates](https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates)
+e impostato nella configurazione del server tramite `--chat-template-file`.
+La pagina del progetto lo presenta come template sostitutivo per Qwen 3.5,
+3.6, 3.8 e 3.8 Flash-Next; per `llama-server` indica inoltre
+`--reasoning-format deepseek` per separare il reasoning dal testo normale
+nella risposta API.
+
+Stato dell'esperimento:
+
+- scopo: verificare se il loop di reasoning di Pi è causato dal template
+  ufficiale o dalla gestione dei blocchi `<think>`;
+- template: `chat_template.jinja` dal repository Hugging Face indicato sopra;
+- applicazione: override temporaneo nella configurazione locale, non ancora
+  promosso alla configurazione versionata;
+- risultato: **riuscito nel flusso provato**; con il template alternativo Pi.dev
+  non entra più nel loop di reasoning;
+- cautela: non considerare questa prova una nuova baseline di velocità o
+  qualità finché non sono stati controllati output e comportamento su più
+  richieste.
+
+Il template è quindi censito come workaround funzionante per il problema
+osservato, non ancora come impostazione predefinita definitiva.
+
 ### Confronto rapido Heretic 64k: F16 contro Q8 K/V (6 settembre 2026)
 
 Per separare l'effetto del contesto lungo da quello del modello e della KV,
