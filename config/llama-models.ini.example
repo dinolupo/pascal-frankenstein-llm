@@ -1,68 +1,87 @@
 ; Router preset for the Pascal dual-GPU Qwen3.6-35B-A3B profile.
 ; This file is an example because the GGUF model remains external.
 ; Replace MODEL_PATH with an absolute path before using --models-preset.
+; INI presets do not expand $HOME, ~, or shell variables: use absolute paths.
 ;
 ; The packaged routing profile is installed at:
 ;   INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
-; Replace INSTALL_DIR with the actual installation directory.
+; Replace INSTALL_DIR with the actual installation directory
+; (default: $HOME/.local/share/pascal-frankenstein-llm).
 ;
-; The optional [Qwen3.6-35B-vision] section below adds a second, separately
-; selectable model (via the "model" field in API requests) that loads the
-; same GGUF plus its matching mmproj projector. Replace MMPROJ_PATH with the
-; absolute path to the projector file that matches MODEL_PATH exactly;
-; projectors are not interchangeable across model builds. See
-; doc/MODEL_LOCAL_GUIDE.md for the validated 64k vision profile.
+; chat-template-file: optional Jinja override from froggeric/Qwen-Fixed-Chat-Templates.
+; Required when the client agent enters a reasoning loop under the default template.
+; Remove this line (and reasoning-format below) to use the built-in chat template.
+;
+; The [Qwen3.6-35B-vision] section adds a second, independently selectable model
+; (via the "model" field in API requests) that loads the same GGUF plus its
+; matching BF16 mmproj projector. Replace MMPROJ_PATH with the absolute path.
+; Projectors are not interchangeable across model builds.
+; Use moe-cache-slots = 130,108 (not 160,108) when the projector is GPU-offloaded
+; because it needs extra VRAM on CUDA0.
 
 version = 1
 
 [Qwen3.6-35B-heretic]
-model = MODEL_PATH
-alias = qwen36-35b-heretic
-load-on-startup = true
-parallel = 1
-c = 131072
-n = 32768
-no-context-shift = true
-ngl = 99
-ncmoe = 33
-ts = 10,7
-moe-cache-slots = 160,108
-moe-cache-profile = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
-fa = on
-ctk = q8_0
-ctv = q8_0
-b = 512
-ub = 512
-spec-type = draft-mtp
-spec-draft-n-max = 2
-reasoning = on
-reasoning-preserve = true
-temp = 0.6
-top-p = 0.95
-top-k = 20
-repeat-penalty = 1.0
-presence-penalty = 0.0
-jinja = true
-no-ui = true
+model               = MODEL_PATH
+alias               = qwen36-her
+load-on-startup     = true
+parallel            = 1
+c                   = 131072
+n                   = 32768
+no-context-shift    = true
+ngl                 = 99
+ncmoe               = 33
+ts                  = 10,7
+moe-cache-slots     = 160,108
+moe-cache-profile   = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
+fa                  = on
+ctk                 = q8_0
+ctv                 = q8_0
+b                   = 512
+ub                  = 512
+spec-type           = draft-mtp
+spec-draft-n-max    = 2
+reasoning           = on
+reasoning-preserve  = true
+; chat-template-file = INSTALL_DIR/config/chat_template.jinja
+; reasoning-format  = deepseek
+temp                = 0.6
+top-p               = 0.95
+top-k               = 20
+repeat-penalty      = 1.0
+presence-penalty    = 0.0
+jinja               = true
+no-ui               = true
 
 [Qwen3.6-35B-vision]
-model = MODEL_PATH
-mmproj = MMPROJ_PATH
-alias = qwen36-35b-a3b-vision
-load-on-startup = false
-parallel = 1
-c = 65536
-ngl = 99
-ncmoe = 33
-ts = 10,7
-moe-cache-slots = 130,108
-moe-cache-profile = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
-mmproj-offload = true
-image-min-tokens = 1024
-fa = on
-ctk = q8_0
-ctv = q8_0
-b = 512
-ub = 512
-jinja = true
-no-ui = true
+model               = MODEL_PATH
+mmproj              = MMPROJ_PATH
+mmproj-offload      = true
+image-min-tokens    = 1024
+alias               = qwen36-her-vision
+load-on-startup     = false
+parallel            = 1
+c                   = 65536
+ngl                 = 99
+ncmoe               = 33
+ts                  = 10,7
+moe-cache-slots     = 130,108
+moe-cache-profile   = INSTALL_DIR/moe-traces/qwen36-35b-mtp-merged.csv
+fa                  = on
+ctk                 = q8_0
+ctv                 = q8_0
+b                   = 512
+ub                  = 512
+spec-type           = draft-mtp
+spec-draft-n-max    = 2
+reasoning           = on
+reasoning-preserve  = true
+; chat-template-file = INSTALL_DIR/config/chat_template.jinja
+; reasoning-format  = deepseek
+temp                = 0.6
+top-p               = 0.95
+top-k               = 20
+repeat-penalty      = 1.0
+presence-penalty    = 0.0
+jinja               = true
+no-ui               = true

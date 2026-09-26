@@ -1,4 +1,16 @@
-# Baseline e obiettivi
+# Experiment Log — Pascal Frankenstein LLM
+
+Diario cronologico completo degli esperimenti: parametri, comandi, fallimenti
+e misure. Usare questo documento come riferimento prima di proporre un nuovo
+esperimento o ripetere una misurazione.
+
+**Ambiente attuale:** Native Linux Mint (dalla prima settimana di settembre 2026).
+Le sezioni precedenti documentano la fase WSL2 (Ubuntu 24.04.1 su Windows),
+conservate per riproducibilità storica; non sono l'ambiente operativo corrente.
+
+---
+
+# Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori
 sono il riferimento da riprodurre e superare con i test nativi in WSL2.
