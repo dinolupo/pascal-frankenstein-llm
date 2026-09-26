@@ -2,13 +2,16 @@
 
 A personal local-LLM inference and hardware-adaptation project for an old rig:
 Intel i7-4790K with a GTX 1080 Ti (11 GB) and a GTX 1070 (8 GB).
-The aim is practical, reproducible inference on dual unequal Pascal GPUs — not a new inference engine.
+The aim is practical, reproducible inference on dual unequal Pascal GPUs — not
+ a new inference engine.
 
 The work starts from [llama.cpp](https://github.com/ggml-org/llama.cpp) and,
 for the MoE experiments, from the `perf` branch of
 [thecodacus/llama.cpp](https://github.com/thecodacus/llama.cpp), initially at
 commit `d927e7dc1`. This file documents what was needed to make that fork useful on
 two unequal Pascal GPUs with no CUDA peer-to-peer access.
+
+Find more info at my [second brain project](https://dinuxnode.com)
 
 ## Scope and disclosure
 
@@ -80,6 +83,40 @@ ${EDITOR:-vi} "$install_dir/config/llama-models.ini"
 
 Replace `MODEL_PATH` and `INSTALL_DIR` with absolute paths. The INI parser
 does not expand `$HOME`, `~`, or shell variables.
+
+## Model selection rationale
+
+The primary model — **Qwen3.6-35B-A3B** — was chosen for the following reasons:
+
+- **VRAM budget**: the MoE architecture keeps only ~3 B parameters active per
+  token. A Q4_K_M quant with the `-ncmoe 33` profile fits the combined 19 GB of
+  the two Pascal cards with room for a 128k K/V cache.
+- **Quality at the budget**: among models that fit this hardware, Qwen3.6-35B-A3B
+  delivers the best subjective coding and reasoning quality observed during local
+  testing.
+- **MTP compatibility**: the Heretic `Native-MTP-Preserved` variant retains the
+  draft heads needed for Multi-Token Prediction, giving a meaningful decode
+  speed-up (72–73 % acceptance rate at 128k context in the validated baseline).
+- **Dual-quant availability**: separate text (Heretic Q4_K_M) and vision
+  (BF16 mmproj) GGUFs allow switching between text/coding and multimodal modes
+  without reloading the full model weights.
+
+### Reasoning-loop workaround
+
+During local use with external agents (Pi.dev), the model occasionally entered a
+reasoning loop with the official chat template. A fixed Jinja template from
+[froggeric/Qwen-Fixed-Chat-Templates](https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates)
+resolved the issue. It is listed as a supported workaround (not the default) in
+the INI example and is activated by uncommenting two lines:
+
+```ini
+chat-template-file = INSTALL_DIR/config/chat_template.jinja
+reasoning-format   = deepseek
+```
+
+Operational instructions and the experiment record are in
+[`doc/MODEL_LOCAL_GUIDE.md § Chat template override`](doc/MODEL_LOCAL_GUIDE.md#chat-template-override-workaround-for-reasoning-loops)
+and [`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md).
 
 ## The local MoE cache adaptation
 
@@ -211,3 +248,8 @@ about llama.cpp or the upstream fork. Full methodology and all runs are in
 | Qwen3.8-27B Q4_K_M | 16k | full GPU, `-ts 10,7`, F16 KV | 176 t/s | 10.3 t/s | dense baseline |
 | Qwen3.6-35B MTP-UD Q4_K_M | 64k | `-ncmoe 33`, cache `160,108`, MTP `n-max=2` | — | **30.1 t/s** | short prompt |
 | Qwen3.6-35B Heretic Q4_K_M | 128k | `-ncmoe 33`, cache `160,108`, MTP `n-max=2`, Q8 KV | 153.8 t/s | **23.6 t/s** | 120k effective tokens, 72.8% MTP acceptance |
+
+![Token generation speed on dual Pascal GPUs](https://dinuxnode.com/img/token-speed.gif)
+
+*Real-time token generation on the Qwen3.6-35B Heretic Q4\_K\_M model at 128k context.
+Full write-up: [Resurrezione GPU Pascal LLM](https://dinuxnode.com/60-69-vetrina--and--digital-garden/61.01-resurrezione-gpu-pascal-llm#show-off-performance)*
