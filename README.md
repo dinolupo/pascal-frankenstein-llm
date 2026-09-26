@@ -19,6 +19,11 @@ This repository is a record of local integration, code adaptation, measurement,
 and debugging. It does **not** claim authorship of llama.cpp, GGML, the MoE
 expert-cache design, or multi-GPU inference in general.
 
+I want to thank Salvatore Sanfilippo aka `antirez` for his great passion,
+`thecodacus` and all the contributors of open source community.
+We are living in an amazing time, and with the help of AI I hope the world
+will be a better place.
+
 `thecodacus` created the `perf`-branch MoE work: routing traces, hot/cold
 expert caching, CPU/GPU overlap, and its speculative-decoding path. The local
 change described here places each hot-expert cache pack on the GPU that owns
@@ -44,25 +49,42 @@ CUDA Graphs being disabled on Pascal is expected, not a failure.
 The NVIDIA Control Panel power mode must be **Prefer maximum performance**
 before drawing any performance conclusions.
 
+## Benchmark show-off ❤️❤️❤️ 🎉🎉🎉
+
+What I have achieved (and I am so happy):
+
+![Token generation speed on dual Pascal GPUs](https://dinuxnode.com/img/token-speed.gif)
+
+*Real-time token generation on the Qwen3.6-35B Heretic Q4\_K\_M model at 128k context.
+Full write-up: [Resurrezione GPU Pascal LLM](https://dinuxnode.com/60-69-vetrina--and--digital-garden/61.01-resurrezione-gpu-pascal-llm#show-off-performance)*
+
+
 ## Current operational setup
 
 The verified daily configuration is the Heretic Qwen3.6-35B-A3B
 `Native-MTP-Preserved` Q4_K_M GGUF with `-ts 10,7`, `-ncmoe 33`,
 distributed cache slots, and MTP `--spec-draft-n-max 2`.
 
-The server is started via the installed helper script:
+The server is started with the following command (I created a script not included in this distro):
+
+> .local/bin/genai-llamacpp.sh
 
 ```bash
-genai-llamacpp.sh
-```
+#!/usr/bin/env bash
 
-Which runs:
+# Exit on errors, unset variables, or failures inside pipelines.
+set -euo pipefail
 
-```bash
+export LLAMA_IP=0.0.0.0
+export LLAMA_PORT=8001
+export LLAMA_API_KEY=changethisverylongboringkey
+export install_dir="$HOME/.local/share/pascal-frankenstein-llm"
 llama-server \
-  --models-preset "$HOME/.local/share/pascal-frankenstein-llm/config/llama-models.ini" \
-  --host 0.0.0.0 --port 8001 \
-  --api-key "$LLAMA_API_KEY"
+  --models-preset "$install_dir/config/llama-models.ini" \
+  --host "$LLAMA_IP" \
+  --port "$LLAMA_PORT" \
+  --api-key "$LLAMA_API_KEY" \
+  --models-max 1
 ```
 
 The INI preset selects the model and all its parameters. Two preset sections
@@ -101,6 +123,21 @@ The primary model — **Qwen3.6-35B-A3B** — was chosen for the following reaso
   (BF16 mmproj) GGUFs allow switching between text/coding and multimodal modes
   without reloading the full model weights.
 
+This one is what I have chosen:
+
+`Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-Q4_K_M.gguf` 21.8 GB
+
+And for vision capabilities:
+
+mmproj-BF16.gguf
+
+from [llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF](https://huggingface.co/llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF)
+
+
+To use Vision capabilities (recognize content of uploaded images) download [Vision Projector](https://huggingface.co/llmfan46/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-GGUF/resolve/main/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-mmproj-BF16.gguf?download=true)
+
+I renamed the file on my PC :-)
+
 ### Reasoning-loop workaround
 
 During local use with external agents (Pi.dev), the model occasionally entered a
@@ -114,7 +151,7 @@ chat-template-file = INSTALL_DIR/config/chat_template.jinja
 reasoning-format   = deepseek
 ```
 
-Operational instructions and the experiment record are in
+Old uncleaned notes and experiments log are in
 [`doc/MODEL_LOCAL_GUIDE.md § Chat template override`](doc/MODEL_LOCAL_GUIDE.md#chat-template-override-workaround-for-reasoning-loops)
 and [`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md).
 
@@ -194,30 +231,6 @@ cmake --build build-pascal-cuda -j 4
 In this fork's `llama-bench`, a slash keeps it a single configuration
 (`-ts 10/7`); a comma starts two separate benchmark configurations.
 
-## Measurement rules
-
-- Change one variable at a time. Use `r=1` only for screening; require at
-  least `r=3` before calling a result a baseline.
-- Record model hash, fork commit, context allocated and actually populated,
-  K/V type, batch/ubatch, cache/MTP settings, RAM/swap, VRAM per GPU, prompt
-  throughput, generation throughput, and correctness observations.
-- `pp512` and `tg128` are synthetic; neither is equivalent to a real chat request.
-
-Full experiment record: [`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md).
-
-## Repository map
-
-| Path | Purpose |
-| --- | --- |
-| [`llama.cpp/`](llama.cpp/) | Git submodule — local `pascal-dual-gpu-cache` fork. |
-| [`config/`](config/) | Example INI preset for the portable router; copy and edit before use. |
-| [`scripts/`](scripts/) | Release packaging, installation, verification, download, and launch helpers. |
-| [`moe-traces/`](moe-traces/) | The two consolidated v1 routing profiles used by the documented experiments. |
-| [`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md) | Complete chronological experiment record. |
-| [`doc/BENCHMARKS_AND_QUALITY.md`](doc/BENCHMARKS_AND_QUALITY.md) | Quality and long-context validation protocol. |
-| [`doc/MODEL_LOCAL_GUIDE.md`](doc/MODEL_LOCAL_GUIDE.md) | Operational guide: local serving, 128k context, vision, Tailscale, Open WebUI. |
-| [AGENTS.md](AGENTS.md) | Instructions for coding agents; not end-user documentation. |
-| [LICENSE](LICENSE) | MIT license for this repository; the submodule retains its upstream license. |
 
 ## Upstream work
 
@@ -236,20 +249,3 @@ The modified llama.cpp fork retains its upstream license and attribution
 requirements; publish local fork changes with the original license intact.
 
 ---
-
-## Appendix: benchmark summary
-
-These are local measurements on this specific hardware, not portable claims
-about llama.cpp or the upstream fork. Full methodology and all runs are in
-[`doc/BASELINE_LOG.md`](doc/BASELINE_LOG.md).
-
-| Model / workload | Context | Config | Prefill | Generation | Notes |
-| --- | ---: | --- | ---: | ---: | --- |
-| Qwen3.8-27B Q4_K_M | 16k | full GPU, `-ts 10,7`, F16 KV | 176 t/s | 10.3 t/s | dense baseline |
-| Qwen3.6-35B MTP-UD Q4_K_M | 64k | `-ncmoe 33`, cache `160,108`, MTP `n-max=2` | — | **30.1 t/s** | short prompt |
-| Qwen3.6-35B Heretic Q4_K_M | 128k | `-ncmoe 33`, cache `160,108`, MTP `n-max=2`, Q8 KV | 153.8 t/s | **23.6 t/s** | 120k effective tokens, 72.8% MTP acceptance |
-
-![Token generation speed on dual Pascal GPUs](https://dinuxnode.com/img/token-speed.gif)
-
-*Real-time token generation on the Qwen3.6-35B Heretic Q4\_K\_M model at 128k context.
-Full write-up: [Resurrezione GPU Pascal LLM](https://dinuxnode.com/60-69-vetrina--and--digital-garden/61.01-resurrezione-gpu-pascal-llm#show-off-performance)*
