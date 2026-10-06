@@ -87,7 +87,7 @@ server, the actual installed text/vision presets, sequential model loads,
 functional smoke tests, three ten-turn stress repetitions per profile and
 memory sampling. It never installs the candidate.
 
-Thresholds compared with matching baseline workload:
+Default strict thresholds compared with matching baseline workload:
 
 - generation throughput loss greater than 5%: stop;
 - prefill throughput loss greater than 10%: stop;
@@ -100,6 +100,24 @@ borderline/noisy results; do not silently relax thresholds or adjust cache quota
 to mask a memory regression. Different output lengths/routing at positive
 temperature must be considered; use a greedy control when necessary.
 Keep warm-up outside measurements and use the same prompt-cache policy.
+
+For hybrid/recurrent models, record `cache_n` and `prompt_n` when TTFT changes.
+Noncanonical generated BPE tokens or template trimming can invalidate a prefix
+and require checkpoint rollback even when visible text is unchanged. Do not
+reuse state against different token IDs. A passing greedy control helps diagnose
+a stochastic gate; it does not replace the operational measurement.
+
+For this integration, the user explicitly approved accepting explained latency
+compromises with operational presets unchanged. Opt in with
+`--accept-latency-regression "Recorded diagnosis and acceptance rationale"` on
+the checkpoint runner or benchmark. Only a TTFT-only breach can be accepted:
+generation/prefill breaches, functional errors and incomplete measurements still
+fail. Reports retain percentage deltas, absolute TTFT cost, violations, rationale
+and whether the exception was used. `passed` indicates policy acceptance, not
+absence of regressions; inspect `performance_thresholds_passed` in the gate and
+`performance_assessment.thresholds_passed` in benchmark reports. The exception
+applies to both baseline and previous-checkpoint comparisons. Strict mode remains
+the default. Previously rejected evidence is never rewritten.
 
 ## Feature-specific coverage
 

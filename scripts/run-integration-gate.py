@@ -17,7 +17,7 @@ import zlib
 
 import requests
 
-from benchmark_stress import compare_reports, get_vram_stats
+from benchmark_stress import assess_reports, get_vram_stats, require_accepted
 
 
 def server_environment(server):
@@ -101,11 +101,15 @@ def main():
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--previous", type=Path, help="Also compare previous accepted checkpoint")
+    parser.add_argument("--accept-latency-regression", metavar="RATIONALE",
+                        help="Explicit latency-only exception; never waive throughput or functional failures")
     parser.add_argument("--port", type=int, default=18081)
     parser.add_argument("--max-tokens", type=int, default=384)
     parser.add_argument("--reasoning", choices=("on", "off"), default="off")
     parser.add_argument("--temperature", type=float, default=0.6)
     args = parser.parse_args()
+    if args.accept_latency_regression is not None and not args.accept_latency_regression.strip():
+        parser.error("latency acceptance requires a nonempty rationale")
     if args.results.exists():
         parser.error("results directory already exists; preserve old evidence")
     processes = subprocess.check_output(["ps", "-eo", "comm="], text=True).splitlines()
@@ -136,6 +140,9 @@ def main():
             for library in sorted(args.server.resolve().parent.glob("*.so*"))
         },
         "source_diff_sha256": hashlib.sha256(source_diff).hexdigest(),
+        "latency_rationale": args.accept_latency_regression,
+        "performance_assessments": {},
+        "measurements_complete": False,
         "passed": False,
     }
     stop = threading.Event()
@@ -200,15 +207,35 @@ def main():
                 ]
                 if args.baseline:
                     command.extend(["--baseline", str(args.baseline / f"{profile}.json")])
+                if args.accept_latency_regression is not None:
+                    command.extend(["--accept-latency-regression", args.accept_latency_regression])
                 with (args.results / f"{profile}.log").open("w") as output:
-                    subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,
-                                   env=environment, check=True)
+                    completed = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,
+                                               env=environment, check=False)
+                report = json.loads((args.results / f"{profile}.json").read_text())
+                if "performance_assessment" in report:
+                    metadata["performance_assessments"][f"baseline_{profile}"] = report["performance_assessment"]
+                if completed.returncode != 0 or not report.get("passed"):
+                    raise RuntimeError(
+                        f"{profile} benchmark failed (exit {completed.returncode}): "
+                        f"{report.get('error', 'report not accepted')}"
+                    )
                 if args.previous:
-                    report = json.loads((args.results / f"{profile}.json").read_text())
                     previous = json.loads((args.previous / f"{profile}.json").read_text())
-                    metadata[f"previous_{profile}_comparison"] = compare_reports(previous, report)
+                    assessment = assess_reports(previous, report, args.accept_latency_regression)
+                    metadata["performance_assessments"][f"previous_{profile}"] = assessment
+                    metadata[f"previous_{profile}_comparison"] = assessment["deltas_percent"]
+                    if assessment["latency_exception_used"]:
+                        print(f"LATENCY EXCEPTION ({profile}, previous): {json.dumps(assessment)}",
+                              file=sys.stderr, flush=True)
+                    require_accepted(assessment)
                 if errors:
                     raise RuntimeError(f"Memory monitor failed: {errors}")
+            metadata["measurements_complete"] = True
+            metadata["performance_thresholds_passed"] = all(
+                assessment["thresholds_passed"]
+                for assessment in metadata["performance_assessments"].values()
+            )
             metadata["passed"] = True
     except (OSError, ValueError, requests.RequestException, subprocess.SubprocessError,
             RuntimeError, KeyError, IndexError, TypeError) as error:

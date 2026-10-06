@@ -115,7 +115,9 @@ def summarize(results):
     return summary
 
 
-def compare_reports(baseline, candidate):
+def assess_reports(baseline, candidate, latency_rationale=None):
+    if latency_rationale is not None and not latency_rationale.strip():
+        raise ValueError("Latency acceptance requires a nonempty rationale")
     if not baseline.get("passed") or baseline["workload"] != candidate["workload"]:
         raise ValueError("Baseline failed or workload identity mismatch")
     if baseline["workload"]["repeats"] < 3:
@@ -128,9 +130,30 @@ def compare_reports(baseline, candidate):
     failures = [key for key, limit, lower in (
         ("tok_per_sec", -5, True), ("prefill_tps", -10, True), ("ttft_s", 10, False),
     ) if (changes[key] < limit - 1e-9 if lower else changes[key] > limit + 1e-9)]
-    if failures:
-        raise ValueError(f"Performance gate failed: {failures}; deltas={changes}")
-    return changes
+    accepted_latency = failures == ["ttft_s"] and latency_rationale is not None
+    return {
+        "deltas_percent": changes,
+        "threshold_violations": failures,
+        "thresholds_passed": not failures,
+        "accepted": not failures or accepted_latency,
+        "latency_rationale": latency_rationale,
+        "latency_exception_used": accepted_latency,
+        "ttft_delta_seconds": current["ttft_s"]["mean"] - reference["ttft_s"]["mean"],
+    }
+
+
+def compare_reports(baseline, candidate):
+    assessment = assess_reports(baseline, candidate)
+    require_accepted(assessment)
+    return assessment["deltas_percent"]
+
+
+def require_accepted(assessment):
+    if not assessment["accepted"]:
+        raise ValueError(
+            f"Performance gate failed: {assessment['threshold_violations']}; "
+            f"deltas={assessment['deltas_percent']}"
+        )
 
 
 def positive_int(value):
@@ -154,9 +177,13 @@ def main():
     parser.add_argument("--repeats", type=positive_int, default=1)
     parser.add_argument("--output", type=Path, help="JSON results, never includes API key")
     parser.add_argument("--baseline", type=Path, help="Reference JSON for regression gate")
+    parser.add_argument("--accept-latency-regression", metavar="RATIONALE",
+                        help="Explicitly accept only a TTFT breach; preserve thresholds and rationale")
     parser.add_argument("--reasoning", choices=("on", "off"), default="on")
     parser.add_argument("--no-cache-prompt", action="store_true", help="Reprocess full history on every turn")
     args = parser.parse_args()
+    if args.accept_latency_regression is not None and not args.accept_latency_regression.strip():
+        parser.error("latency acceptance requires a nonempty rationale")
     if not 0 <= args.temperature < float("inf"):
         parser.error("temperature must be finite and nonnegative")
     headers = {"Authorization": f"Bearer {args.api_key}"} if args.api_key else {}
@@ -166,7 +193,8 @@ def main():
         "repeats": args.repeats, "prompts": TURNS_PROMPTS, "system": SYSTEM_PROMPT,
         "cache_prompt": not args.no_cache_prompt,
     }
-    report = {"schema_version": 1, "workload": workload, "results": [], "passed": False}
+    report = {"schema_version": 1, "workload": workload, "results": [], "passed": False,
+              "measurements_complete": False}
     status = 1
     try:
         print(f"Target: {args.url} | Model: {args.model}", flush=True)
@@ -205,8 +233,16 @@ def main():
                       f"TTFT {result['ttft_s']:.3f}s | {result['total_tokens']} tokens | "
                       f"{result['finish_reason']}", flush=True)
         report["summary"] = summarize(report["results"])
+        report["measurements_complete"] = True
         if args.baseline:
-            report["comparison"] = compare_reports(json.loads(args.baseline.read_text()), report)
+            assessment = assess_reports(
+                json.loads(args.baseline.read_text()), report, args.accept_latency_regression,
+            )
+            report["performance_assessment"] = assessment
+            report["comparison"] = assessment["deltas_percent"]
+            if assessment["latency_exception_used"]:
+                print(f"LATENCY EXCEPTION: {json.dumps(assessment)}", file=sys.stderr, flush=True)
+            require_accepted(assessment)
         report["passed"] = True
         status = 0
         print(json.dumps(report["summary"], indent=2), flush=True)

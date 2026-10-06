@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -109,6 +110,37 @@ class BenchmarkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             benchmark.compare_reports(baseline, {"workload": {"repeats": 1}})
 
+    def test_latency_exception_preserves_breach_and_cost(self):
+        baseline = {
+            "passed": True, "workload": {"repeats": 3, "turns": 1},
+            "results": [{"tok_per_sec": 100, "prefill_tps": 100, "ttft_s": 1}] * 3,
+        }
+        candidate = copy.deepcopy(baseline)
+        candidate["results"] = [{"tok_per_sec": 100, "prefill_tps": 100, "ttft_s": 1.25}] * 3
+        strict = benchmark.assess_reports(baseline, candidate)
+        self.assertFalse(strict["accepted"])
+        rationale = "Token-prefix mismatch requires hybrid checkpoint rollback."
+        accepted = benchmark.assess_reports(baseline, candidate, rationale)
+        self.assertTrue(accepted["accepted"])
+        self.assertFalse(accepted["thresholds_passed"])
+        self.assertTrue(accepted["latency_exception_used"])
+        self.assertEqual(accepted["threshold_violations"], ["ttft_s"])
+        self.assertEqual(accepted["latency_rationale"], rationale)
+        self.assertEqual(accepted["ttft_delta_seconds"], 0.25)
+        for metric in ("tok_per_sec", "prefill_tps"):
+            failing = copy.deepcopy(candidate)
+            for result in failing["results"]:
+                result[metric] = 80
+            assessment = benchmark.assess_reports(baseline, failing, rationale)
+            self.assertFalse(assessment["accepted"])
+            with self.assertRaises(ValueError):
+                benchmark.require_accepted(assessment)
+        candidate["results"].pop()
+        with self.assertRaises(ValueError):
+            benchmark.assess_reports(baseline, candidate, rationale)
+        with self.assertRaises(ValueError):
+            benchmark.assess_reports(baseline, baseline, " ")
+
     def test_invalid_input(self):
         for value in ("0", "-1"):
             with self.assertRaises(argparse.ArgumentTypeError):
@@ -133,6 +165,46 @@ class BenchmarkTests(unittest.TestCase):
              patch.object(benchmark.requests, "get", return_value=Response([])), \
              patch.object(benchmark.requests, "post", side_effect=requests.exceptions.Timeout("idle")):
             self.assertEqual(benchmark.main(), 1)
+
+    def test_cli_latency_acceptance_and_throughput_failure(self):
+        baseline = {
+            "passed": True,
+            "workload": {
+                "model": "Qwen36 her vis", "turns": 1, "max_tokens": 2048,
+                "seed": 123, "temperature": 0.6, "reasoning": "on", "repeats": 3,
+                "prompts": benchmark.TURNS_PROMPTS, "system": benchmark.SYSTEM_PROMPT,
+                "cache_prompt": True,
+            },
+            "results": [{"tok_per_sec": 45, "prefill_tps": 150, "ttft_s": 0.1}] * 3,
+        }
+        for exception, slow_generation, expected in (
+            (False, False, 1), (True, False, 0), (True, True, 1),
+        ):
+            with self.subTest(exception=exception, slow_generation=slow_generation), \
+                 tempfile.TemporaryDirectory() as directory:
+                reference = Path(directory) / "baseline.json"
+                output = Path(directory) / "result.json"
+                reference.write_text(json.dumps(baseline))
+                argv = ["benchmark", "--turns", "1", "--repeats", "3",
+                        "--baseline", str(reference), "--output", str(output)]
+                if exception:
+                    argv.extend(["--accept-latency-regression", "Reproduced prefix rollback"])
+                responses = chunks()
+                if slow_generation:
+                    responses[2]["timings"]["predicted_per_second"] = 30
+                # Each request calls the clock at start, first content, and finish.
+                with patch.object(sys, "argv", argv), \
+                     patch.object(benchmark, "get_vram_stats", return_value=[{"id": "0"}]), \
+                     patch.object(benchmark.requests, "get", return_value=Response([])), \
+                     patch.object(benchmark.requests, "post", side_effect=[
+                         Response(responses), Response(responses), Response(responses),
+                     ]), patch.object(benchmark.time, "perf_counter",
+                                      side_effect=[0, 0.2, 1, 2, 2.2, 3, 4, 4.2, 5]):
+                    self.assertEqual(benchmark.main(), expected)
+                report = json.loads(output.read_text())
+                self.assertTrue(report["measurements_complete"])
+                self.assertEqual(report["passed"], expected == 0)
+                self.assertFalse(report["performance_assessment"]["thresholds_passed"])
 
     def test_runner_unsets_presence_based_p2p(self):
         with patch.dict(os.environ, {"GGML_CUDA_P2P": "0", "LLAMA_API_KEY": "test-only"}):

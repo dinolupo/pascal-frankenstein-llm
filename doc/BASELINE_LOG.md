@@ -111,6 +111,90 @@ nella sessione. Il runner conserva anche diff del sorgente non ancora
 committato e hash dei binari/librerie, e supporta `--previous` oltre a `--baseline`.
 Installazione e branch stabili ancora invariati; nessun push o deploy.
 
+### Stack operativo sul tag v0.6.0: candidato non ancora promosso
+
+Branch del fork `pascal-v0.6.0-stack`, base ufficiale `d812350493`.
+Cache/tracing `ac743f81f`, overlap `0ac3d9b27`, adattamento Pascal
+`47b3df22d`, contratto dispatcher `08fa762f7`, hook Laguna/Qwen4Exp
+`8e5bc28c7`/`5a0a2b60f` e dipendenze host-register/prefetch
+`20f5994bf`/`1163cb349`/`5f83fbbe7` sono stati adattati insieme.
+Le nuove fusioni shared-expert, gli operatori FFN upstream e la nuova API MTP
+sono conservati: non e stato reintrodotto il precedente `model_shared`.
+Host registration e prefetch restano opt-in, spenti durante queste misure;
+il loro percorso attivo non e ancora validato.
+
+Build separata `build-pascal-v060`, con gli stessi flag CUDA 12.9/sm_61,
+superata per server, bench, tracer e test. Sampling e 11 test offline superati.
+Su ciascuna GPU passano 58 test RMS_NORM/SCALE e 14 test MMQ esatti/ID mascherati.
+Passano aritmetica, richiamo multi-turno, stop normale e immagine rossa.
+Il checkpoint completo a T=0,6 resta **bloccato dalla TTFT vision**:
+
+| Profilo | Generation | Prefill | TTFT | Esito rispetto ad A2 |
+| --- | ---: | ---: | ---: | --- |
+| Testo | 45,27 t/s | 84,88 t/s | 0,816 s | Superato |
+| Vision | 43,25 t/s | 79,20 t/s | 0,950 s | TTFT +24,99%, bloccato |
+
+Entrambi hanno 30 turni completi, con gli stessi asset, preset e parametri
+della baseline. Le risposte e le storie risultanti non sono pero identiche
+tra versioni a temperatura positiva.
+Il debug upstream `LLAMA_SERVER_SLOTS_DEBUG=1` riproduce una tokenizzazione
+generata non canonica: due token per "col"+"lo" vengono ritokenizzati in un
+unico token per "collo". Il testo non cambia, ma cambia il prefisso dei token.
+Uno spazio finale eliminato dal `trim` del template provoca un'altra divergenza.
+La memoria ibrida deve ripristinare un checkpoint e rivalutare il suffisso:
+al turno vision 3 il candidato valuta 434 token invece dei 48 del checkpoint
+MMQ, con 519 token cached invece di 906; TTFT 2,332 s contro 0,743 s.
+Non forzare il riuso di KV/stato quando gli ID non coincidono.
+
+Come controllo diagnostico previsto dal protocollo sono stati eseguiti
+due gate completi greedy, cambiando soltanto T da 0,6 a 0. Il controllo
+maintenance usa `d859c854e`, ricompilato sul proprio branch pulito.
+Il candidato e stato poi ripristinato byte per byte: SHA-256 del diff
+`6a7e5da5516fd7e8efc39a8f6b2360e55bc481d409561c796f75da0c50276deb`.
+I binari separati provengono dalla build di quel medesimo sorgente.
+
+| Sorgente/profilo, T=0 | Generation | Prefill | TTFT |
+| --- | ---: | ---: | ---: |
+| Maintenance testo | 44,14 t/s | 85,77 t/s | 0,831 s |
+| v0.6.0 testo | 43,56 t/s | 84,64 t/s | 0,793 s |
+| Maintenance vision | 43,89 t/s | 66,78 t/s | 0,718 s |
+| v0.6.0 vision | 44,62 t/s | 64,35 t/s | 0,742 s |
+
+Tre conversazioni da dieci turni per riga, controlli funzionali inclusi.
+Delta candidato: testo generation -1,32%, prefill -1,32%, TTFT -4,57%;
+vision generation +1,65%, prefill -3,65%, TTFT +3,27%.
+Il controllo greedy supera tutti i limiti 5%/10%, ma **non sostituisce
+automaticamente il gate T=0,6** e non prova equivalenza byte per byte.
+
+Picchi globali delle due GPU, comprendenti il display e i due profili:
+T=0,6 candidato 10255/7942 MiB; greedy maintenance 10256/7938 MiB;
+greedy candidato 10242/7942 MiB. Picchi MemTotal-MemAvailable:
+11125/7586/10327 MiB rispettivamente; swap occupato 4690/4862/5672 MiB.
+Sono misure globali di sistema, non RSS del solo modello ne prova di swap I/O.
+I prompt effettivamente popolati raggiungono al massimo 2141/1536 token
+nel candidato T=0,6, 3942/1226 nel controllo greedy e 2954/1550 nel candidato
+greedy (testo/vision): nessuna di queste prove valida il long context.
+
+L'utente ha successivamente approvato di proseguire con i preset invariati,
+accettando compromessi di latenza spiegati e documentati. Il gate ora mantiene
+la modalita stretta predefinita e offre un'eccezione TTFT esplicita con motivazione;
+generation/prefill, correttezza e misure incomplete restano bloccanti.
+13 test offline verificano soglie, eccezione isolata e fallimenti misti.
+Il nuovo run completo `v060-core-policy`, stesso sorgente e T=0,6, misura
+44,62/42,96 t/s, prefill 84,67/79,23 t/s e TTFT 0,778/0,917 s (testo/vision),
+30 turni per profilo e controlli funzionali/immagine superati.
+Vision: TTFT +20,61% (+0,157 s) rispetto ad A2 e +26,96% (+0,195 s) rispetto
+al checkpoint MMQ. Generation rispetto a MMQ: +3,70% testo, -0,21% vision.
+L'esecuzione e accettata secondo la politica esplicita, ma le soglie TTFT
+restano segnate come violate nel report. Non e una certificazione di speedup
+ne una promozione completa: gli altri test e gruppi di compatibilita restano.
+
+Evidenze locali: `files/v060-core`, `files/v060-prefix-debug.log`,
+`files/greedy-maintenance`, `files/greedy-v060`, diff e log della build
+nella sessione. Il pin del progetto resta `d859c854e`; nessun commit di
+promozione v0.6.0, push o installazione. Restano aperti la decisione sul
+gate prestazionale, gli altri gruppi del fork e la validazione release-wide.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

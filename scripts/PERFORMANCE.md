@@ -81,6 +81,16 @@ risposta finale; aggiungere prove funzionali con reasoning attivo.
 Ogni checkpoint deve usare gli stessi preset, template, pesi e warm-up.
 Non inferire prestazioni a 120k token da questo breve workload multi-turno.
 
+La modalita predefinita resta stretta. Per questa integrazione e stata approvata
+l'accettazione delle sole regressioni TTFT spiegate, senza cambiare i preset.
+Usare esplicitamente `--accept-latency-regression "Diagnosi e motivazione"`
+nel benchmark o nel runner: generation/prefill, errori funzionali e misure
+incomplete restano bloccanti. I report conservano violazioni, delta percentuali,
+costo TTFT in secondi e motivazione. `passed` significa accettato secondo la
+politica selezionata, non privo di regressioni: leggere anche
+`performance_thresholds_passed` nel gate e `performance_assessment` nei report.
+La modalita greedy resta un controllo separato, non sostituisce T=0,6.
+
 Per eseguire automaticamente entrambi i profili sul binario candidato:
 
 ```bash
