@@ -57,6 +57,28 @@ the previous published branch.
 
 ## Mandatory checkpoint gate
 
+### Current attributed stack and unresolved contracts
+
+On `pascal-v0.6.0-stack`, `4d0ac3bdb` contains the operational cache/overlap
+group and `7760081b1` contains the validated optional CPU/CUDA Pascal port.
+The parent pin is still the maintenance checkpoint, not a promoted release.
+
+The user selected CPU and CUDA Pascal coverage; preserve other upstream backend
+sources unchanged and document unverified shared HIP/MUSA code. Do not import
+Tensor-Core-only Turbo MMA fusion or unused stubs into a Pascal stack.
+Upstream Q2_0 is newer than the old fork patch and must remain intact.
+The new attention dispatch already permits compiled mixed K/V pairs; adapt
+template registration rather than reintroducing its obsolete selection API.
+
+The original shared-embedding MTP export is **not** an upstream equivalent:
+`--mtp-shared-embd`, `nextn_shared_target_tensors` and
+`llama_model_params.model_shared` are absent from the official release.
+Its drafts omit embeddings and borrow target-owned tensors; upstream's
+self-contained drafts require those tensors. Resolve legacy compatibility
+explicitly before declaring feature parity. Likewise preserve explicit rejection
+of a draft-only Qwen4Exp export used as an ordinary target.
+No local Qwen4Exp asset is currently runtime-certified.
+
 Before changing the fork, state the hypothesis, files affected, correctness
 checks and performance checks. Every coherent checkpoint must compile and pass
 the same tests before another feature is introduced.

@@ -189,11 +189,110 @@ L'esecuzione e accettata secondo la politica esplicita, ma le soglie TTFT
 restano segnate come violate nel report. Non e una certificazione di speedup
 ne una promozione completa: gli altri test e gruppi di compatibilita restano.
 
+### Primo checkpoint operativo v0.6.0 accettato
+
+Commit locale del fork `4d0ac3bdb`, gruppo cache/overlap/Pascal/prefetch
+attribuito ai commit originali elencati nel messaggio. Il nuovo test
+`test-moe-scheduler` assegna grafi CUDA0/CUDA1/CUDA0 e controlla numericamente
+tre esecuzioni, con prefetch spento/acceso e con tutte le route mascherate.
+Rimuovendo la correzione dell'ownership degli eventi, la fixture corretta
+con ID univoci riproduce `CUDA error: invalid resource handle`, exit 134.
+Con la correzione i risultati passano. Una prima fixture con ID duplicati
+produceva risultati errati anche senza prefetch ed e stata invalidata:
+non e evidenza della regressione.
+Gli slot/eventi del prefetch vengono sincronizzati e ricreati al cambio GPU;
+nessun P2P. Il caso tutte-route-negative non accede oltre il bitset.
+
+Test funzionali separati, MTP off e contesto 128k allocato:
+cache `0`, `64`, `0,64` passano aritmetica, EOG e richiamo multi-turno.
+Il test input invalido ha scoperto che `64,` veniva accettato come quota
+singola: corretto il parser CLI/env per non perdere voci vuote.
+Verificato il rifiuto esplicito di `-1`, `64,invalid`, `64,`, `64/`,
+`64,,32` e `,64`. Sampling e 14 casi MMQ/ID mascherati per GPU ripassati.
+Tutte le modifiche del gruppo sono state ricompilate insieme.
+
+Gate finale `v060-core-final`, 30 turni per profilo e controlli funzionali/
+immagine: testo 45,64 t/s, prefill 84,55 t/s, TTFT 0,777 s;
+vision 42,93 t/s, prefill 78,94 t/s, TTFT 0,920 s.
+Vision TTFT +27,43% (+0,198 s) rispetto al maintenance MMQ, accettato con
+motivazione esplicita; violazione ancora visibile nel report.
+Non si certifica ancora uno speedup: confronti finali ravvicinati A/B
+e test release-wide restano da eseguire.
+
+La fase opzionale TurboQuant non e stata applicata: il replay esplorativo
+di `170322f8d` (94 file, circa 20k righe aggiunte, molti backend) rivela
+conflitti strutturali anche su Metal, dove upstream ha sostituito lo shader
+monolitico con kernel separati. Il replay non validato e stato rimosso
+soltanto dai percorsi appena modificati, tornando al checkpoint pulito.
+Serve chiarire il perimetro dei backend prima di un porting non verificabile
+sull'hardware disponibile. Il pin del progetto e ancora il maintenance;
+installazione e remoti invariati.
+
 Evidenze locali: `files/v060-core`, `files/v060-prefix-debug.log`,
 `files/greedy-maintenance`, `files/greedy-v060`, diff e log della build
 nella sessione. Il pin del progetto resta `d859c854e`; nessun commit di
 promozione v0.6.0, push o installazione. Restano aperti la decisione sul
 gate prestazionale, gli altri gruppi del fork e la validazione release-wide.
+
+## Port opzionale CPU/CUDA Pascal validato
+
+L'utente ha scelto di conservare le funzionalita CPU/CUDA Pascal e lasciare
+invariati i sorgenti degli altri backend upstream, senza certificare TurboQuant
+su Metal/Vulkan/HIP/MUSA/SYCL. Il gruppo e nel commit locale del fork
+`7760081b1`, sopra il gruppo operativo `4d0ac3bdb` e il tag ufficiale.
+Origine attribuita: `170322f8d` e interfacce cache miste `4cd54c684`.
+Il Q2_0 CUDA piu recente e gia upstream: non e stato sovrascritto con
+`933820717`. La fusione Turbo MMA `40f20368d` richiede Tensor Core e non
+appartiene al perimetro Pascal. Corretto il contratto della nuova API attention,
+con rotazione Q centralizzata; conservati top-k e precisione upstream.
+
+I nuovi test hanno scoperto e riprodotto due difetti del vecchio upload Turbo:
+indici broadcast errati e gruppi WHT da 64 elementi trattati come blocchi packed
+da 128, con scritture/quantizzazione non corrette. Corrette tutte le varianti;
+il layout serialized resta invariato. Eliminato anche lo stato globale mutabile
+del gruppo WHT CPU. I convertitori CUDA TQ erano presenti ma il dispatcher
+saltava le moltiplicazioni: ora usano la dequantizzazione/cuBLAS esistente,
+senza fingere l'esistenza di kernel MMVQ/MMQ per quei codec. MUL_MAT_ID TQ
+resta sul fallback CPU, non viene pubblicizzato come kernel CUDA.
+
+Build Release CUDA 12.9/sm_61 superata. Su **ciascuna GPU** passano
+128 casi numerici realmente eseguiti: WHT forward/inverse, gruppi 64/128,
+SET_ROWS broadcast e view, 21 coppie K/V Turbo/F16/Q8 in decode e prefill,
+Q2_0 e TQ3_1S/TQ4_1S matmul. Nessun caso selezionato saltato.
+Il test registrato `test-turbo-quant` verifica 18 round trip con limiti
+numerici espliciti, non restituisce piu successo dopo aver soltanto stampato
+gli errori. Restano superati sampling, quantizzazione CPU e 13 test offline
+del benchmark. Sei configurazioni del modello reale passano aritmetica,
+EOG e richiamo: Turbo2/3/4 con MTP, due cache miste senza MTP e Turbo3 CPU-only.
+Questi smoke test non certificano la qualita generale delle cache lossy.
+
+Gate finale `v060-turbo-final`, preset operativi **ancora Q8 K/V**, T=0,6,
+tre conversazioni da dieci turni per profilo, con immagine e controlli:
+
+| Profilo | Generation | Prefill | TTFT | Delta generation vs gruppo core |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 45,18 t/s | 84,61 t/s | 0,804 s | -1,02% |
+| Vision | 43,36 t/s | 79,00 t/s | 0,931 s | +1,00% |
+
+Gate accettato. TTFT vision rispetto ad A2: +22,46%, +0,171 s, ancora
+registrata come violazione con eccezione esplicita. Rispetto al gruppo core
+e +1,16%, +0,011 s. **Nessuno speedup complessivo certificato**: manca il
+confronto finale ravvicinato e ripetuto con sorgente originale e maintenance.
+Evidenze: `files/turbo-blas-CUDA0.log`, `files/turbo-blas-CUDA1.log`,
+`files/turbo-roundtrip-final.log`, `files/turbo-model-smoke`,
+`files/v060-turbo-final` nella sessione.
+
+L'inventario ha inoltre confermato un contratto non equivalente a upstream:
+gli export MTP legacy con `--mtp-shared-embd`, metadata
+`nextn_shared_target_tensors` e `llama_model_params.model_shared`.
+La v0.6.0 usa invece export draft autosufficienti; non basta classificare
+queste patch come gia presenti. Anche il rifiuto esplicito di un Qwen4Exp
+draft-only usato come target va conservato/adattato. Serve decidere la politica
+di retrocompatibilita prima di dichiarare completa la parita del fork.
+Non sono stati scaricati pesi Qwen4Exp per simulare una certificazione assente.
+Host registration/prefetch sul modello reale, validazione release-wide,
+contesti sostanzialmente popolati e pin finale restano aperti.
+Installazione, INI e remoti invariati; pin del progetto ancora `d859c854e`.
 
 # Baseline e obiettivi (fase WSL2 — storico)
 

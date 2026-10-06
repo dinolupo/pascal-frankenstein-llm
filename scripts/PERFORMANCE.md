@@ -128,6 +128,47 @@ I casi sono relativamente grandi (circa 450 MiB di pesi ciascuno), quindi
 usarli con un singolo worker e senza processi modello concorrenti.
 Il catalogo copre separatamente gli ID hot/cold `-1`.
 
+### Scheduler hot/cold e prefetch multi-GPU
+
+Il target `test-moe-scheduler` verifica risultati numerici su grafi assegnati
+CUDA0/CUDA1/CUDA0, tre esecuzioni dello stesso grafo, input tutti mascherati
+e upload opzionale di pesi host. Eseguire senza altri processi modello:
+
+```bash
+env -u GGML_CUDA_P2P -u GGML_SCHED_PREFETCH_EXPERTS \
+  llama.cpp/build-pascal-v060/bin/test-moe-scheduler masked
+env -u GGML_CUDA_P2P -u GGML_SCHED_PREFETCH_EXPERTS \
+  llama.cpp/build-pascal-v060/bin/test-moe-scheduler prefetch
+env -u GGML_CUDA_P2P GGML_SCHED_PREFETCH_EXPERTS=1 \
+  llama.cpp/build-pascal-v060/bin/test-moe-scheduler prefetch
+```
+
+Il percorso prefetch ricrea gli slot/eventi al cambio di GPU dopo aver
+sincronizzato gli utenti precedenti: nessun P2P. Questo e un controllo numerico
+sintetico, non una prova di speedup del prefetch sul modello.
+
+### Codec opzionali CPU/CUDA Pascal
+
+I preset del gate restano Q8 K/V. Per controllare separatamente TurboQuant e
+il Q2_0 upstream senza cambiare l'installazione:
+
+```bash
+ctest --test-dir llama.cpp/build-pascal-v060 \
+  -R '^test-turbo-quant$' --output-on-failure
+env -u GGML_CUDA_P2P llama.cpp/build-pascal-v060/bin/test-backend-ops \
+  -b CUDA0 -o TURBO_WHT,SET_ROWS,FLASH_ATTN_EXT,MUL_MAT \
+  -p 'turbo|width=|type_a=(q2_0|tq3_1s|tq4_1s),type_b=f32,m=32,n=(1|32),k=256,'
+```
+
+Ripetere il secondo comando con `-b CUDA1`. Devono essere eseguiti 128 casi
+per GPU, senza `not supported` o errori; il solo exit code non certifica
+copertura, perche il runner upstream considera validi anche i casi saltati.
+Il test CPU verifica 18 round trip con soglie numeriche esplicite.
+Le cache Turbo sono lossy: queste verifiche non sostituiscono perplexity,
+quality benchmark o contesti lunghi e non dimostrano speedup.
+I matmul TQ CUDA usano dequantizzazione/cuBLAS, non kernel MMVQ/MMQ dedicati;
+MUL_MAT_ID TQ conserva il fallback CPU.
+
 ---
 
 ## 🔍 Parametri Chiave Individuati per il Fix
