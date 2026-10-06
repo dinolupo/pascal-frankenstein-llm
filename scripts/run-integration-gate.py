@@ -3,10 +3,12 @@
 
 import argparse
 import base64
+from contextlib import nullcontext
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import socket
 import struct
@@ -18,6 +20,14 @@ import zlib
 import requests
 
 from benchmark_stress import assess_reports, get_vram_stats, require_accepted
+from nvidia_power import cuda_gpu_uuids, read_power_modes, require_max_performance
+
+
+def parse_source_commit(version):
+    match = re.search(r"^version:.*\bcommit ([0-9a-f]{7,40})\)", version, re.MULTILINE)
+    if not match:
+        raise RuntimeError(f"Cannot identify the server's embedded source commit: {version}")
+    return match.group(1)
 
 
 def server_environment(server):
@@ -29,20 +39,29 @@ def server_environment(server):
     return environment
 
 
-def monitor(stop, output, errors):
+def monitor(stop, output, errors, power_uuids=None, gpu_ready=None, gpu_lock=None):
     try:
         with output.open("w") as stream:
             while not stop.is_set():
-                sample = {"time": time.time(), "gpus": get_vram_stats()}
+                sample = {"time": time.time()}
                 sample["meminfo"] = Path("/proc/meminfo").read_text()
-                sample["gpu_state"] = subprocess.check_output(
-                    ["nvidia-smi", "--query-gpu=index,pstate,clocks.sm,clocks.mem,power.draw,temperature.gpu",
-                     "--format=csv,noheader,nounits"], text=True, timeout=10,
-                ).strip()
+                with gpu_lock if gpu_lock is not None else nullcontext():
+                    if gpu_ready is None or gpu_ready.is_set():
+                        sample["gpus"] = get_vram_stats()
+                        sample["gpu_state"] = subprocess.check_output(
+                            ["nvidia-smi", "--query-gpu=index,pstate,clocks.sm,clocks.mem,power.draw,temperature.gpu",
+                             "--format=csv,noheader,nounits"], text=True, timeout=10,
+                        ).strip()
+                        if power_uuids is not None:
+                            sample["power_modes"] = read_power_modes()
+                    else:
+                        sample["gpu_sampling_deferred"] = True
                 stream.write(json.dumps(sample) + "\n")
                 stream.flush()
+                if "power_modes" in sample:
+                    require_max_performance(sample["power_modes"], power_uuids)
                 stop.wait(2)
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         errors.append(str(error))
         stop.set()
 
@@ -107,9 +126,15 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=384)
     parser.add_argument("--reasoning", choices=("on", "off"), default="off")
     parser.add_argument("--temperature", type=float, default=0.6)
+    parser.add_argument("--require-max-performance", action="store_true",
+                        help="Verify NV-CONTROL preference for every CUDA GPU before and during the gate")
+    parser.add_argument("--expected-source", metavar="SHA",
+                        help="Require this embedded binary source commit, not the current checkout")
     args = parser.parse_args()
     if args.accept_latency_regression is not None and not args.accept_latency_regression.strip():
         parser.error("latency acceptance requires a nonempty rationale")
+    if args.expected_source is not None and not re.fullmatch("[0-9a-f]{7,40}", args.expected_source):
+        parser.error("expected source must be a hexadecimal Git commit SHA (7 to 40 characters)")
     if args.results.exists():
         parser.error("results directory already exists; preserve old evidence")
     processes = subprocess.check_output(["ps", "-eo", "comm="], text=True).splitlines()
@@ -131,16 +156,25 @@ def main():
         "model_aliases": ["Qwen36 her jin", "Qwen36 her vis"],
         "reasoning": args.reasoning,
         "temperature": args.temperature,
+        "require_max_performance": args.require_max_performance,
         "source_sha": subprocess.check_output(
             ["git", "-C", str(args.server.resolve().parent), "rev-parse", "HEAD"], text=True,
         ).strip(),
         "server_sha256": hashlib.sha256(args.server.read_bytes()).hexdigest(),
+        "runner_sha256": {
+            name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+            for name in ("run-integration-gate.py", "benchmark_stress.py", "nvidia_power.py")
+        },
         "library_sha256": {
             library.name: hashlib.sha256(library.read_bytes()).hexdigest()
             for library in sorted(args.server.resolve().parent.glob("*.so*"))
         },
         "source_diff_sha256": hashlib.sha256(source_diff).hexdigest(),
         "latency_rationale": args.accept_latency_regression,
+        "opt_in_environment": {
+            name: os.environ.get(name)
+            for name in ("GGML_CUDA_REGISTER_HOST", "GGML_SCHED_PREFETCH_EXPERTS")
+        },
         "performance_assessments": {},
         "measurements_complete": False,
         "passed": False,
@@ -150,7 +184,31 @@ def main():
     environment = server_environment(args.server)
     server = None
     sampler = None
+    # Keep probes out of bulk registration after an intermittent loading timeout.
+    # RAM remains sampled; full GPU telemetry resumes after warm-up.
+    gpu_ready = threading.Event() if "GGML_CUDA_REGISTER_HOST" in environment else None
+    gpu_lock = threading.Lock() if gpu_ready is not None else None
+    metadata["gpu_polling_deferred_during_registration_load"] = gpu_ready is not None
     try:
+        metadata["server_version"] = subprocess.check_output(
+            [str(args.server.resolve()), "--version"], env=environment,
+            stderr=subprocess.STDOUT, text=True, timeout=30,
+        )
+        embedded_commit = parse_source_commit(metadata["server_version"])
+        binary_source = subprocess.check_output(
+            ["git", "-C", str(args.server.resolve().parent), "rev-parse", f"{embedded_commit}^{{commit}}"],
+            text=True,
+        ).strip()
+        metadata["checkout_sha"] = metadata["source_sha"]
+        metadata["source_sha"] = binary_source
+        metadata["source_diff_applies_to_binary"] = binary_source == metadata["checkout_sha"]
+        if args.expected_source and not binary_source.startswith(args.expected_source):
+            raise RuntimeError(f"Binary source mismatch: expected {args.expected_source}, got {binary_source}")
+        power_uuids = None
+        if args.require_max_performance:
+            power_uuids = cuda_gpu_uuids()
+            metadata["power_modes_start"] = read_power_modes()
+            require_max_performance(metadata["power_modes_start"], power_uuids)
         for reference_path in (args.baseline, args.previous):
             if reference_path:
                 reference = json.loads((reference_path / "gate.json").read_text())
@@ -179,10 +237,14 @@ def main():
             if not ready:
                 raise RuntimeError("Server did not become healthy")
             sampler = threading.Thread(
-                target=monitor, args=(stop, args.results / "memory.jsonl", errors),
+                target=monitor, args=(stop, args.results / "memory.jsonl", errors,
+                                     power_uuids, gpu_ready, gpu_lock),
             )
             sampler.start()
             for profile, model in (("text", "Qwen36 her jin"), ("vision", "Qwen36 her vis")):
+                if gpu_ready is not None:
+                    with gpu_lock:
+                        gpu_ready.clear()
                 # Warm up separately; never include it in the measured conversations.
                 response = requests.post(f"{url}/v1/chat/completions", json={
                     "model": model, "messages": [{"role": "user", "content": "Rispondi solo: pronto."}],
@@ -194,9 +256,18 @@ def main():
                 response.close()
                 if not warmup.get("choices"):
                     raise RuntimeError("Warm-up returned no choices")
+                if gpu_ready is not None:
+                    with gpu_lock:
+                        gpu_ready.set()
+                    if args.require_max_performance:
+                        modes = read_power_modes()
+                        metadata[f"power_modes_loaded_{profile}"] = modes
+                        require_max_performance(modes, power_uuids)
                 (args.results / f"warmup-{profile}.json").write_text(json.dumps(warmup, indent=2))
                 functional = functional_checks(url, model, profile == "vision")
                 (args.results / f"functional-{profile}.json").write_text(json.dumps(functional, indent=2))
+                if errors:
+                    raise RuntimeError(f"Memory/power monitor failed: {errors}")
                 command = [
                     sys.executable, str(Path(__file__).with_name("benchmark_stress.py")),
                     "--url", url, "--model", model, "--turns", "10",
@@ -231,6 +302,9 @@ def main():
                     require_accepted(assessment)
                 if errors:
                     raise RuntimeError(f"Memory monitor failed: {errors}")
+            if args.require_max_performance:
+                metadata["power_modes_end"] = read_power_modes()
+                require_max_performance(metadata["power_modes_end"], power_uuids)
             metadata["measurements_complete"] = True
             metadata["performance_thresholds_passed"] = all(
                 assessment["thresholds_passed"]

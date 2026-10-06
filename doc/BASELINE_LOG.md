@@ -289,10 +289,101 @@ La v0.6.0 usa invece export draft autosufficienti; non basta classificare
 queste patch come gia presenti. Anche il rifiuto esplicito di un Qwen4Exp
 draft-only usato come target va conservato/adattato. Serve decidere la politica
 di retrocompatibilita prima di dichiarare completa la parita del fork.
+La decisione successiva e registrata nella sezione seguente.
 Non sono stati scaricati pesi Qwen4Exp per simulare una certificazione assente.
 Host registration/prefetch sul modello reale, validazione release-wide,
 contesti sostanzialmente popolati e pin finale restano aperti.
 Installazione, INI e remoti invariati; pin del progetto ancora `d859c854e`.
+
+## Migrazione MTP autosufficiente e controllo energetico
+
+L'utente ha scelto gli export upstream autosufficienti: niente ripristino di
+`model_shared` o `--mtp-shared-embd`. Re-esportare dai pesi sorgente con `--mtp`
+senza il vecchio flag, oppure mantenere il modello completo per `draft-mtp`.
+Gli asset operativi Native-MTP-Preserved non richiedono conversione. Rimuovere
+il metadata legacy non ricrea embeddings/head mancanti.
+
+Checkpoint locale del fork `590b56282`: rifiuto esplicito del metadata legacy,
+guardia Qwen4Exp draft-only come target adattata da `d2939cd9f`, quattro test
+reali del contratto export senza pesi esterni e istruzioni di migrazione.
+Build, nove CTest mirati e architetture sintetiche CPU/CUDA0/CUDA1 superati.
+Le due GPU concordano con il riferimento CPU (NMSE circa 3e-14/5e-14),
+roundtrip e ordine batch misto passano. Queste prove non certificano
+l'inferenza Qwen4Exp reale o il suo MTP con pesi non disponibili.
+L'inventario dei 27 commit non equivalenti e completo nel runbook.
+
+L'utente ha autorizzato la politica runtime Prefer maximum performance.
+Il client `nvidia-settings` 615.71.09 su driver 580.178.04 dichiarava assegnato
+`1`, ma restituiva `0` anche senza config, con CUDA attivo e sugli stessi UUID.
+La verifica diretta NV-CONTROL ha letto inizialmente `2`, quindi `1` dopo
+assegnazione sincronizzata; una nuova connessione legge ancora `1` su entrambe.
+Non sono stati cambiati driver, installazione, clock o limiti di potenza.
+La discrepanza CLI/NV-CONTROL e registrata, non reinterpretata come stato P0/P2.
+Il gate ora puo verificare gli UUID e la preferenza prima, durante e dopo
+ciascuna prova (`--require-max-performance`); fallimenti e copertura incompleta
+non vengono trasformati in successo. La modalita predefinita resta invariata.
+
+Il primo gate `v060-mtp-migration` e stato interrotto perche la politica e
+cambiata durante la prova: **escluso** da ogni confronto. Replica completa
+`v060-mtp-migration-max`: 30 turni per profilo, controlli aritmetici/EOG,
+riuso prefisso e immagine, 134 campioni energetici tutti su `1`.
+Preset Q8, T=0,6 e tutti gli asset invariati:
+
+| Profilo | Generation | Prefill | TTFT | Generation vs opzionale |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 44,80 t/s | 84,17 t/s | 0,841 s | -0,83% |
+| Vision | 42,94 t/s | 78,88 t/s | 0,925 s | -0,97% |
+
+Gate accettato; TTFT vision vs A2 +21,67%, +0,165 s, con la precedente
+eccezione motivata. I vecchi riferimenti non avevano verifica della politica:
+non usare questi delta per certificare speedup. Restano i controlli ravvicinati
+originale/maintenance/candidato, le prove release-wide e il pin finale.
+Gli hash dei binari/librerie e il diff completo pre-commit sono nell'evidenza;
+il gate successivo verifica anche il commit incorporato in `--version`,
+separato dall'HEAD corrente dei vecchi build di controllo.
+
+## Osservabilita prefetch e verifiche release native
+
+Il checkpoint `988518731` aggiunge solo un DEBUG al vero upload degli esperti:
+non cambia scheduling, routing o allocazione. Build, nove CTest e fixture
+scheduler multi-GPU superati. Gate operativo r3 a flag opt-in spenti:
+testo 44,56 t/s, prefill 84,13 t/s, TTFT 0,828 s; vision 41,60 t/s,
+prefill 77,58 t/s, TTFT 0,942 s. Gate accettato con la precedente eccezione
+solo-latenza; nessuno speedup certificato da confronti storici.
+
+Smoke reali superati: aritmetica/EOG/riuso prefisso, reasoning con contenuto
+non vuoto, JSON con schema non vincolato alla risposta, tool call e prosecuzione,
+MTP spento, cache spenta e quota scalare 64. Configurazioni diagnostiche generate
+solo nella sessione; INI installato invariato.
+
+Su Linux nativo, mmap read-only privato/condiviso e trasferimenti esatti
+H2D/D2H su entrambe le GPU passano; passa anche una registrazione MAP_SHARED
+da 16 GiB. Il primo probe confrontava erroneamente `cudaHostGetFlags` con i
+flag di `cudaHostRegister`: quell'API descrive allocazioni HostAlloc, non
+certifica i flag della registrazione. Il probe corretto verifica successo
+dell'API, contenuto trasferito e unregister, senza quell'asserzione.
+
+Un load del router con polling GPU attivo ha superato il timeout di 300 s
+vicino al termine. Il primo range da 17.027.633.152 byte torna invece `true`
+nelle verifiche dirette del loader. Le repliche reali senza polling, con
+polling differito e con polling precoce ripristinato **passano tutte**.
+La causa del timeout resta irrisolta: la sequenza non dimostra un deadlock
+causato dalla telemetria, ne l'assenza di supporto per host registration.
+Nessuna modifica a mmap, chunking o algoritmo di registrazione del fork.
+
+Tre coppie register-on/register-prefetch superate, con 16.238,82 MiB
+effettivamente pinned e 396 upload osservati in ciascun caso prefetch.
+Prompt large-batch effettivo 1.850 token, risposta `323`, stop normale.
+Nel caso con deferral: register-on 3 campioni RAM-only e 5 completi;
+register-prefetch 3 RAM-only e 6 completi, tutti i modi osservati su `1`.
+Il runner evita precauzionalmente probe GPU durante i load registrati;
+la lacuna di copertura GPU/power e esplicita, la telemetria completa riprende
+dopo warm-up. Registrazione/prefetch restano opt-in e non sono promossi come
+ottimizzazione di velocita: le repliche brevi sono screening, non baseline.
+
+Il candidato e stato ricompilato dal commit pulito `988518731`, versione
+incorporata `0.6.0-dev`, con toolchain/flag invariati. Nove CTest superati;
+22 test offline degli strumenti di misura superati.
 
 # Baseline e obiettivi (fase WSL2 — storico)
 

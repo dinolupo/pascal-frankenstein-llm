@@ -109,6 +109,43 @@ server anche in caso di fallimento. Non modifica l'installazione. Usa i due alia
 operativi indicati sopra; un preset con alias differenti richiede adattamento
 esplicito. Questi smoke test non sostituiscono backend/logits o long-context.
 
+Per la certificazione finale aggiungere `--require-max-performance`. Il runner
+verifica la preferenza PowerMizer tramite NV-CONTROL prima e durante le prove,
+confrontando gli UUID con tutte le GPU CUDA. Registra i modi nella telemetria
+e fallisce se una GPU non e su `1` o se manca copertura. Non cambia la politica.
+Richiede il display X corrente e le librerie X11/XNVCtrl gia installate; nessuna
+lettura mancante viene trattata come successo. Senza il flag il comportamento
+del gate resta invariato. Verifica indipendente:
+
+```bash
+python3 scripts/nvidia_power.py
+python3 -m unittest discover -s scripts -p 'test_nvidia_power.py'
+```
+
+Nel sistema provato, client `nvidia-settings` 615.71.09 e driver 580.178.04
+mostrano letture discordanti: CLI `0`, NV-CONTROL `1` persistente anche
+da una nuova connessione. Il gate usa la preferenza del driver X, non la
+sola conferma testuale di assegnazione del client. Non confondere questa
+preferenza con lo stato CUDA P2 o con una garanzia di clock massimo.
+I confronti con le vecchie misure senza verifica della politica non
+certificano uno speedup: servono controlli ravvicinati con la stessa politica.
+Per controlli compilati in precedenza usare anche `--expected-source SHA`.
+Il runner legge il commit incorporato in `--version` e lo risolve nella storia
+Git; non attribuisce un vecchio binario all'HEAD corrente del checkout.
+Conserva separatamente `checkout_sha` e `source_diff_applies_to_binary`.
+Un'identita assente, non risolvibile o diversa da quella richiesta fallisce.
+Un load con registrazione host massiva e polling GPU e andato in timeout.
+Le repliche senza polling, con polling differito e con polling precoce
+ripristinato sono passate: la causa resta irrisolta, non e dimostrato un
+deadlock del monitor o un limite di registrazione del driver.
+Con `GGML_CUDA_REGISTER_HOST` presente il runner campiona RAM durante il load
+e differisce esplicitamente i probe GPU fino al warm-up completato, con
+sincronizzazione per non lasciare query in volo al cambio modello. Il campo
+`gpu_sampling_deferred` segnala i campioni senza dati GPU: non sono letture
+riuscite o copertura energetica durante quel load. La politica e verificata
+prima e dopo il load; durante tutte le misure torna la telemetria completa.
+Con la registrazione spenta il comportamento di campionamento resta invariato.
+
 ### Regressione padding MMQ
 
 Il catalogo di test-backend-ops contiene i due casi dimensionali segnalati in

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -214,10 +215,77 @@ class BenchmarkTests(unittest.TestCase):
             self.assertEqual(os.environ["GGML_CUDA_P2P"], "0")
             self.assertEqual(environment["LD_LIBRARY_PATH"], "/tmp/candidate/bin")
 
+    def test_embedded_source_identity_not_checkout(self):
+        self.assertEqual(gate.parse_source_commit(
+            "version: 0.3.0-dev (build 10819, commit 47b3df22d)\nbuilt with GNU"),
+            "47b3df22d")
+        self.assertEqual(gate.parse_source_commit(
+            "CUDA initialization\nversion: 0.6.0 (build 1, commit 590b56282)\n"),
+            "590b56282")
+        for invalid in ("", "unidentified binary", "version: 0.6.0 (commit unknown)"):
+            with self.subTest(version=invalid), self.assertRaises(RuntimeError):
+                gate.parse_source_commit(invalid)
+
     def test_image_fixture_is_png(self):
         prefix, encoded = gate.red_image().split(",", 1)
         self.assertEqual(prefix, "data:image/png;base64")
         self.assertTrue(base64.b64decode(encoded).startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_power_monitor_records_failure_and_stops(self):
+        modes = [{"nvctrl_gpu": 0, "uuid": "GPU-a", "power_mizer_mode": 2}]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "memory.jsonl"
+            stop, errors = threading.Event(), []
+            with patch.object(gate, "get_vram_stats", return_value=[{"id": "0"}]), \
+                 patch.object(gate.subprocess, "check_output", return_value="GPU state"), \
+                 patch.object(gate.Path, "read_text", return_value="MemAvailable: 1000 kB"), \
+                 patch.object(gate, "read_power_modes", return_value=modes):
+                gate.monitor(stop, output, errors, ["GPU-a"])
+            self.assertTrue(stop.is_set())
+            self.assertEqual(len(errors), 1)
+            self.assertIn("Prefer maximum performance", errors[0])
+            self.assertEqual(json.loads(output.read_text())["power_modes"], modes)
+
+    def test_default_monitor_does_not_require_x_libraries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "memory.jsonl"
+            stop, errors = threading.Event(), []
+            with patch.object(gate, "get_vram_stats", return_value=[{"id": "0"}]), \
+                 patch.object(gate.subprocess, "check_output", return_value="GPU state"), \
+                 patch.object(gate.Path, "read_text", return_value="MemAvailable: 1000 kB"), \
+                 patch.object(gate, "read_power_modes", side_effect=AssertionError("unexpected X query")), \
+                 patch.object(stop, "wait", side_effect=lambda timeout: stop.set()):
+                gate.monitor(stop, output, errors)
+            self.assertEqual(errors, [])
+            self.assertNotIn("power_modes", json.loads(output.read_text()))
+
+    def test_registration_load_defers_gpu_probes_then_resumes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "memory.jsonl"
+            stop, ready, errors = threading.Event(), threading.Event(), []
+            modes = [{"nvctrl_gpu": 0, "uuid": "GPU-a", "power_mizer_mode": 1}]
+
+            def advance(timeout):
+                if ready.is_set():
+                    stop.set()
+                else:
+                    ready.set()
+
+            with patch.object(gate, "get_vram_stats", return_value=[{"id": "0"}]) as vram, \
+                 patch.object(gate.subprocess, "check_output", return_value="GPU state"), \
+                 patch.object(gate.Path, "read_text", return_value="MemAvailable: 1000 kB"), \
+                 patch.object(gate, "read_power_modes", return_value=modes) as policy, \
+                 patch.object(stop, "wait", side_effect=advance):
+                gate.monitor(stop, output, errors, ["GPU-a"], ready, threading.Lock())
+            samples = [json.loads(line) for line in output.read_text().splitlines()]
+            self.assertEqual(errors, [])
+            self.assertTrue(samples[0]["gpu_sampling_deferred"])
+            self.assertNotIn("gpus", samples[0])
+            self.assertNotIn("power_modes", samples[0])
+            self.assertEqual(samples[1]["power_modes"], modes)
+            self.assertNotIn("gpu_sampling_deferred", samples[1])
+            vram.assert_called_once()
+            policy.assert_called_once()
 
 
 if __name__ == "__main__":

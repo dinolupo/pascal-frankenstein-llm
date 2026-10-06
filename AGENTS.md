@@ -88,9 +88,29 @@ quality or long-context work.
 ## Operational safety
 
 - Do not run multiple huge model processes concurrently.
-- `cudaHostRegister` was unsupported under the old WSL2 setup; on native
-  Linux it should work, but re-verify (host registration + the paired
-  prefetch experiment) before relying on it, since it hasn't been re-tested
-  since the environment switch.
+- `cudaHostRegister` was unsupported under the old WSL2 setup. Native Linux
+  revalidation passed read-only transfers on both GPUs, full-model registration
+  and actual expert prefetch. These remain opt-in, not a certified speedup;
+  reserve host RAM and revalidate when changing driver or loading behavior.
 - Do not request or handle the user's `sudo` password. Ask the user to run a
   privileged command when one is genuinely necessary.
+
+## Learnings
+
+- A settings-client assignment message is not proof of power policy. With
+  `nvidia-settings` 615.71.09 and driver 580.178.04, CLI readback returned `0`
+  while direct NV-CONTROL readback persistently returned `1`; use
+  `python3 scripts/nvidia_power.py` and the gate's `--require-max-performance`
+  to verify all UUID-matched GPUs throughout measurements. CUDA P2 is a
+  performance state, not the PowerMizer preference.
+- Retained control binaries do not acquire the checkout's current source SHA.
+  Use `--expected-source SHA` and embedded `--version`, preserve library hashes,
+  and distinguish binary source from checkout/diff provenance.
+- This fork enables P2P by environment-variable presence, not truthiness.
+  `GGML_CUDA_P2P=0` is not disabled; remove the variable entirely.
+- A bulk registered load timed out while GPU polling was active; subsequent
+  runs passed without polling, with deferred polling, and with early polling
+  restored. The cause is unresolved: do not claim a reproducible telemetry
+  deadlock or unsupported host registration. The gate conservatively defers GPU
+  probes during registered loads, retains RAM samples, and synchronizes resumption
+  after warm-up. Deferred samples do not provide GPU/power coverage.

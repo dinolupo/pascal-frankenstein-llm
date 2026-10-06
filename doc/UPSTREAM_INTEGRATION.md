@@ -57,7 +57,7 @@ the previous published branch.
 
 ## Mandatory checkpoint gate
 
-### Current attributed stack and unresolved contracts
+### Current attributed stack and migration contracts
 
 On `pascal-v0.6.0-stack`, `4d0ac3bdb` contains the operational cache/overlap
 group and `7760081b1` contains the validated optional CPU/CUDA Pascal port.
@@ -74,10 +74,65 @@ The original shared-embedding MTP export is **not** an upstream equivalent:
 `--mtp-shared-embd`, `nextn_shared_target_tensors` and
 `llama_model_params.model_shared` are absent from the official release.
 Its drafts omit embeddings and borrow target-owned tensors; upstream's
-self-contained drafts require those tensors. Resolve legacy compatibility
-explicitly before declaring feature parity. Likewise preserve explicit rejection
-of a draft-only Qwen4Exp export used as an ordinary target.
+self-contained drafts require those tensors. The user selected migration to
+self-contained exports, not restoration of the borrowing API. Re-export from
+the original source weights using `--mtp` without `--mtp-shared-embd`, or keep
+the full Native-MTP-Preserved model with native `draft-mtp`. Deleting the
+legacy metadata does not restore omitted weights. The candidate rejects that
+metadata with an actionable error and preserves rejection of a draft-only
+Qwen4Exp export used as an ordinary target. Four focused export contracts and
+synthetic normal-target CPU/CUDA tests pass; the migration checkpoint
+passed its complete operational gate and is committed as `590b56282`.
 No local Qwen4Exp asset is currently runtime-certified.
+
+`988518731` adds a DEBUG trace at the actual expert upload, without changing
+scheduling. Its full operational gate and multi-GPU scheduler fixture pass.
+Native Linux full-model host registration and real expert prefetch pass
+three diagnostic pairs (396 observed uploads each), including deferred and
+early GPU polling. One earlier loading timeout remains unexplained; do not
+misrepresent it as a reproduced telemetry deadlock. Both options remain off
+in the operational performance comparisons.
+
+### Complete source-delta inventory
+
+All 27 initially non-equivalent commits have an explicit disposition.
+"Upstream" means retain the release implementation, not replay the older patch.
+
+| Original commit | Feature | Disposition |
+| --- | --- | --- |
+| `20f5994bf` | Register mmap CPU weights | Adapted in `4d0ac3bdb`; opt-in |
+| `1163cb349` | Expert upload/compute overlap | Adapted in `4d0ac3bdb`; opt-in |
+| `5f83fbbe7` | Prefetch slot sizing and lifetime | Adapted in `4d0ac3bdb` with device-ownership fix |
+| `ac743f81f` | Hot routed-expert cache | Adapted in `4d0ac3bdb` |
+| `8e5bc28c7` | Laguna cache hooks | Adapted in `4d0ac3bdb`; real-model coverage unavailable |
+| `0ac3d9b27` | CPU cold / GPU hot overlap | Adapted in `4d0ac3bdb` |
+| `5a0a2b60f` | Qwen4Exp cache hooks | Adapted in `4d0ac3bdb`; no real asset certification |
+| `08fa762f7` | Expert-pack synchronization | Adapted in `4d0ac3bdb` |
+| `47b3df22d` | Pascal asymmetric device placement | Adapted in `4d0ac3bdb` |
+| `5e7f6271c` | Offload usage/bench documentation | Attributed fork README and this runbook |
+| `d927e7dc1` | MoE cache tuning documentation | Attributed fork README and this runbook |
+| `170322f8d` | TurboQuant | CPU/shared + CUDA Pascal port in `7760081b1` |
+| `933820717` | Q2_0 CUDA | Newer upstream implementation retained |
+| `4cd54c684` | Mixed Turbo/Q8 K/V | Adapted registration/native dispatch in `7760081b1` |
+| `40f20368d` | Turbo Tensor-Core MMA | Outside approved Pascal scope; not imported |
+| `cd72c28bb` | Dequantizer merge brace | Correct final CUDA source in `7760081b1` |
+| `de8f1dd6d` | Turbo build/help interfaces | Necessary interfaces adapted in `7760081b1` |
+| `d82fcef3b` | Qwen4Exp NextN schema | Upstream constants and tensor list retained |
+| `1d0006c19` | Qwen4Exp MTP graph/head | Newer upstream graph, memory and sparse-attention behavior retained |
+| `2271a5893` | Qwen4Exp MTP conversion | Newer upstream self-contained export retained |
+| `5a9d1f718` | Shared target tensors/API | Deliberate self-contained migration; legacy metadata rejected |
+| `557a1dab2` | Shared exporter flag | Deliberate self-contained migration; flag not restored |
+| `6e88aa929` | Draft-only optional trunk | Upstream loader's optional trunk retained |
+| `d2939cd9f` | Invalid draft-as-target guard | Adapted migration guard and focused test |
+| `50aa3c9bf` | MTP comment trimming | Nonfunctional; newer upstream comments retained |
+| `45b5ba3b8` | Shape-keyed CUDA graph cache | Not imported: CUDA graphs disabled below Volta |
+| `4880a0e2c` | Shape-key empty-graph guard | Companion to omitted shape dereference; upstream pointer-only key retained |
+
+Schema/export evidence is in `gguf-py/gguf/constants.py`,
+`conversion/qwen4exp.py`, `src/models/qwen4exp.cpp` and the native MTP
+memory creation. Synthetic normal-target tests are not proof of real Qwen4Exp
+MTP execution. The two graph-cache patches do not speed up Pascal and must not
+be used to justify enabling CUDA graphs or P2P.
 
 Before changing the fork, state the hypothesis, files affected, correctness
 checks and performance checks. Every coherent checkpoint must compile and pass
@@ -108,6 +163,13 @@ Run [the checkpoint runner](../scripts/run-integration-gate.py) as documented in
 server, the actual installed text/vision presets, sequential model loads,
 functional smoke tests, three ten-turn stress repetitions per profile and
 memory sampling. It never installs the candidate.
+For final comparisons add `--require-max-performance`: verify the UUID-matched
+NV-CONTROL preference throughout each run, not only the settings client's
+assignment message. See the client/driver readback discrepancy in the
+performance protocol. Historical gates without verified policy are diagnostic
+references, not sufficient evidence of a release speedup.
+Use `--expected-source SHA` when comparing retained control binaries: the
+embedded binary commit is not necessarily the checkout's HEAD.
 
 Default strict thresholds compared with matching baseline workload:
 
