@@ -10,6 +10,64 @@ conservate per riproducibilità storica; non sono l'ambiente operativo corrente.
 
 ---
 
+## Integrazione v0.6.0: baseline del sorgente attuale (6 ottobre 2026)
+
+Branch candidati: `integration/llama-v0.6.0` nel progetto e
+`pascal-integration-v0.6.0` nel fork. Installazione quotidiana invariata.
+Sorgente di riferimento `47b3df22d0b1f031c2d5a1cff359a25282138c01`,
+build Release, CUDA 12.9.86, GCC 13.3, `sm_61`, test abilitati, Make `-j4`.
+P2P non abilitato; CUDA Graphs disabilitati su Pascal e NCCL assente.
+Build, `test-sampling` e test backend `RMS_NORM,SCALE,MUL_MAT_ID`
+su CUDA0/CUDA1 superati.
+
+Pesi Heretic Native-MTP-Preserved:
+SHA-256 `fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781`;
+projector BF16:
+`d6050bb82a0187e1b0655f1c5daef60c9479273fbd7402ff25d3137df2e071ce`.
+Profilo routing installato:
+`1ad2a9636abd70291a177f25fed859edb4d00365599db593bdea151f6f5e5e0f`;
+template Jinja:
+`e57684bae4156211a55473c5a63be976a405a37ab5be5ae0e5abf1df5349c4b2`.
+INI operativo:
+`0193ae3b51c678b6f75ddeeeeb86bedfb5124b661b7006d8ef9907c6470fce1d`.
+
+Il runner usa i preset installati, un server proprio su loopback:18081 e
+un modello alla volta. Testo: 128k allocato, cache `160,108`;
+vision: 64k allocato, cache `130,108`, projector su GPU.
+Entrambi: Q8 K/V, batch/ubatch 512, `-ncmoe 33`, split `10,7`,
+MTP `n-max=2`, un solo slot e no-context-shift.
+Workload controllato: reasoning off, temperatura 0.6, seed 123,
+10 turni x 3 conversazioni, massimo 384 token per risposta, cache prompt attiva.
+Warm-up escluso dalle misure. Contesto popolato registrato per turno nei
+timings/usage JSON; queste conversazioni NON costituiscono test long-context.
+
+| Profilo | Turni validi | Generation media | Prefill medio | TTFT medio |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 30/30 | 43,39 t/s | 87,18 t/s | 0,806 s |
+| Vision, richieste testuali | 30/30 | 36,71 t/s | 61,26 t/s | 0,784 s |
+
+Deviazioni standard fra turni, non intervalli di confidenza:
+generation 3,02/4,56 t/s, prefill 43,39/4,85 t/s, TTFT 0,446/0,115 s.
+Passati i controlli aritmetici multi-turno con stop normale, e la richiesta
+immagine rossa sul profilo vision. Campioni RAM/swap e VRAM per GPU ogni
+due secondi nei log locali. La velocita usa token e timings del server,
+non il numero di chunk SSE.
+
+La prima prova `baseline-current` e stata invalidata e interrotta: il runner
+impostava `GGML_CUDA_P2P=0`, ma il fork controlla la presenza della variabile.
+Corretto il runner per rimuoverla completamente; solo `baseline-v2` e valido.
+Una ripartenza ha inoltre rivelato TIME_WAIT sulla porta: il controllo
+preliminare ora usa SO_REUSEADDR, senza consentire due server concorrenti.
+Il runner corretto ha completato entrambi i profili e arrestato il proprio server.
+
+Risultati grezzi conservati nella directory `files/baseline-v2` della sessione
+Copilot; non versionare log, risposte, pesi o build.
+Procedura ripetibile in [UPSTREAM_INTEGRATION.md](UPSTREAM_INTEGRATION.md).
+Il tag ufficiale v0.6.0 risolve a `d81235049384534c167caea52b85a694f6103d14`.
+Il dry-run iniziale ha 398 notifiche di conflitto; `git cherry` rileva 677
+commit equivalenti e 27 non equivalenti. Approvata una patch stack attribuita
+sopra il tag, dopo i gate separati EOG/MMQ, anziche risolvere conflitti artificiali.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

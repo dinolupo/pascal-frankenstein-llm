@@ -1,53 +1,18 @@
 #!/usr/bin/env python3
-"""
-benchmark_stress.py - Qwen Pascal Frankenstein Multi-Turn Stress & Performance Benchmark
-
-Simula una conversazione reale multi-turno su llama-server per:
-1. Misurare la velocità reale di generazione (token/s) e latenza TTFT.
-2. Monitorare l'occupazione VRAM reale su GPU 0 (1080 Ti) e GPU 1 (1070).
-3. Testare la stabilità del contesto all'aumentare dei turni e individuare blocchi/deadlock.
-"""
+"""Multi-turn stress benchmark with authoritative tokens and fail-closed gates."""
 
 import argparse
 import json
 import os
+from pathlib import Path
+import statistics
 import subprocess
 import sys
 import time
+
 import requests
 
-def get_vram_stats():
-    """Restituisce l'occupazione VRAM di ciascuna GPU NVIDIA."""
-    try:
-        cmd = [
-            "nvidia-smi",
-            "--query-gpu=index,name,memory.used,memory.total",
-            "--format=csv,noheader,nounits"
-        ]
-        out = subprocess.check_output(cmd, encoding="utf-8").strip()
-        gpus = []
-        for line in out.splitlines():
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) == 4:
-                idx, name, used, total = parts
-                gpus.append({
-                    "id": idx,
-                    "name": name,
-                    "used_mb": int(used),
-                    "total_mb": int(total),
-                    "pct": (int(used) / int(total)) * 100
-                })
-        return gpus
-    except Exception as e:
-        return []
 
-def format_vram(gpus):
-    if not gpus:
-        return "VRAM: [N/A]"
-    items = [f"GPU{g['id']} ({g['name']}): {g['used_mb']}/{g['total_mb']}MB ({g['pct']:.1f}%)" for g in gpus]
-    return " | ".join(items)
-
-# Domande sequenziali per simulare un dialogo reale e far crescere progressivamente il contesto
 TURNS_PROMPTS = [
     "Ciao! Spiegami brevemente quali sono le differenze architetturali chiave tra una GPU Pascal (GTX 1080 Ti) e una moderna architettura con Tensor Core.",
     "Molto chiaro. Ora approfondisci come funziona l'operazione di Matrix Multiplication a 8-bit (INT8) rispetto a FP16 su una scheda senza Tensor Core nativi.",
@@ -58,206 +23,202 @@ TURNS_PROMPTS = [
     "Scrivi un breve frammento in pseudocodice o C per spiegare la logica di smistamento dei token tra i diversi esperti.",
     "Analizza il codice appena scritto e dimmi quali sono i potenziali colli di bottiglia per quanto riguarda la latenza di memoria.",
     "Supponiamo ora che la finestra di contesto raggiunga decine di migliaia di token: come deve gestire la KV-cache l'algoritmo Flash Attention per non esaurire la memoria?",
-    "Ottimo lavoro fin qui. Concludi sintetizzando l'intera discussione in una tabella comparativa finale."
+    "Ottimo lavoro fin qui. Concludi sintetizzando l'intera discussione in una tabella comparativa finale.",
 ]
+SYSTEM_PROMPT = "Sei un assistente AI specializzato in architetture hardware e sistemi distribuiti. Rispondi in modo tecnico e conciso."
+
+
+def get_vram_stats():
+    output = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=index,name,memory.used,memory.total",
+         "--format=csv,noheader,nounits"], text=True, timeout=10,
+    )
+    gpus = []
+    for line in output.strip().splitlines():
+        index, name, used, total = (part.strip() for part in line.split(","))
+        gpus.append({"id": index, "name": name, "used_mb": int(used), "total_mb": int(total)})
+    if not gpus:
+        raise ValueError("No GPU telemetry available")
+    return gpus
+
+
+def read_completion(response):
+    """A chunk can contain zero, one or multiple tokens; use usage instead."""
+    content, reasoning = [], []
+    usage = timings = finish_reason = first_at = None
+    done = False
+    for line in response.iter_lines():
+        if not line:
+            continue
+        text = line.decode("utf-8")
+        if not text.startswith("data:"):
+            continue
+        data = text[5:].strip()
+        if data == "[DONE]":
+            done = True
+            break
+        chunk = json.loads(data)
+        if not isinstance(chunk, dict):
+            raise ValueError("SSE chunk is not an object")
+        if chunk.get("error"):
+            raise ValueError(f"Server SSE error: {chunk['error']}")
+        if chunk.get("usage") is not None:
+            usage = chunk["usage"]
+        if chunk.get("timings") is not None:
+            timings = chunk["timings"]
+        for choice in chunk.get("choices", []):
+            if choice.get("finish_reason") is not None:
+                finish_reason = choice["finish_reason"]
+            delta = choice.get("delta", {})
+            for key, destination in (("content", content), ("reasoning_content", reasoning)):
+                value = delta.get(key)
+                if value:
+                    if not isinstance(value, str):
+                        raise ValueError(f"Invalid {key}")
+                    if first_at is None:
+                        first_at = time.perf_counter()
+                    destination.append(value)
+    if not done or finish_reason not in ("stop", "length"):
+        raise ValueError("Incomplete or failed stream: missing DONE or valid finish_reason")
+    if not content:
+        raise ValueError("No final assistant content (possibly reasoning budget exhausted)")
+    if not isinstance(usage, dict):
+        raise ValueError("Missing authoritative token usage")
+    tokens = usage.get("completion_tokens")
+    if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
+        raise ValueError("Invalid completion_tokens")
+    if not isinstance(timings, dict):
+        raise ValueError("Missing native server timings")
+    for key in ("predicted_per_second", "prompt_per_second"):
+        value = timings.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 < value < float("inf"):
+            raise ValueError(f"Invalid native timing: {key}")
+    return {
+        "content": "".join(content), "reasoning_content": "".join(reasoning),
+        "usage": usage, "timings": timings, "finish_reason": finish_reason,
+        "first_at": first_at,
+    }
+
+
+def summarize(results):
+    if not results:
+        raise ValueError("No measurements")
+    summary = {}
+    for key in ("tok_per_sec", "prefill_tps", "ttft_s"):
+        values = [result[key] for result in results]
+        if any(not isinstance(value, (int, float)) or not 0 < value < float("inf") for value in values):
+            raise ValueError(f"Invalid measurements: {key}")
+        summary[key] = {
+            "mean": statistics.mean(values),
+            "stdev": statistics.stdev(values) if len(values) > 1 else 0,
+        }
+    return summary
+
+
+def compare_reports(baseline, candidate):
+    if not baseline.get("passed") or baseline["workload"] != candidate["workload"]:
+        raise ValueError("Baseline failed or workload identity mismatch")
+    if baseline["workload"]["repeats"] < 3:
+        raise ValueError("Gate requires at least three repetitions")
+    expected = baseline["workload"]["repeats"] * baseline["workload"]["turns"]
+    if len(baseline["results"]) != expected or len(candidate["results"]) != expected:
+        raise ValueError("Gate requires complete repetitions")
+    reference, current = summarize(baseline["results"]), summarize(candidate["results"])
+    changes = {key: (current[key]["mean"] / reference[key]["mean"] - 1) * 100 for key in current}
+    failures = [key for key, limit, lower in (
+        ("tok_per_sec", -5, True), ("prefill_tps", -10, True), ("ttft_s", 10, False),
+    ) if (changes[key] < limit - 1e-9 if lower else changes[key] > limit + 1e-9)]
+    if failures:
+        raise ValueError(f"Performance gate failed: {failures}; deltas={changes}")
+    return changes
+
+
+def positive_int(value):
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return number
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-Turn Stress & Benchmark for Pascal Frankenstein LLM")
-    parser.add_argument("--url", default="http://127.0.0.1:8001", help="Base URL di llama-server (default: http://127.0.0.1:8001)")
-    parser.add_argument("--api-key", default=os.getenv("LLAMA_API_KEY", "changethisverylongboringkey"), help="API Key")
-    parser.add_argument("--model", default="Qwen36 her vis", help="Alias o nome del modello (es. 'Qwen36 her vis' o 'Qwen36 her jin')")
-    parser.add_argument("--turns", type=int, default=10, help="Numero di turni di chat da eseguire (default: 10)")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens per risposta (default: 2048)")
-    parser.add_argument("--timeout", type=int, default=60, help="Timeout in secondi per richiesta (default: 60)")
-    parser.add_argument("--stream", action="store_true", default=True, help="Usa streaming per calcolare con precisione i token/s")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--url", default="http://127.0.0.1:8001")
+    parser.add_argument("--api-key", default=os.getenv("LLAMA_API_KEY", ""))
+    parser.add_argument("--model", default="Qwen36 her vis")
+    parser.add_argument("--turns", type=positive_int, default=10)
+    parser.add_argument("--max-tokens", type=positive_int, default=2048)
+    parser.add_argument("--timeout", type=positive_int, default=60, help="Stream inactivity timeout (seconds)")
+    parser.add_argument("--stream", action="store_true", default=True, help="Compatibility option; always streaming")
+    parser.add_argument("--seed", type=int, default=123)
+    parser.add_argument("--temperature", type=float, default=0.6)
+    parser.add_argument("--repeats", type=positive_int, default=1)
+    parser.add_argument("--output", type=Path, help="JSON results, never includes API key")
+    parser.add_argument("--baseline", type=Path, help="Reference JSON for regression gate")
+    parser.add_argument("--reasoning", choices=("on", "off"), default="on")
+    parser.add_argument("--no-cache-prompt", action="store_true", help="Reprocess full history on every turn")
     args = parser.parse_args()
-
-    print("=" * 80)
-    print("🚀 PASCAL FRANKENSTEIN MULTI-TURN STRESS & BENCHMARK")
-    print(f"Target URL   : {args.url}")
-    print(f"Model Alias  : {args.model}")
-    print(f"Max Turns    : {args.turns}")
-    print(f"Max Tokens/T : {args.max_tokens}")
-    print(f"Initial VRAM : {format_vram(get_vram_stats())}")
-    print("=" * 80)
-
-    # 1. Healthcheck
-    headers = {"Authorization": f"Bearer {args.api_key}"}
+    if not 0 <= args.temperature < float("inf"):
+        parser.error("temperature must be finite and nonnegative")
+    headers = {"Authorization": f"Bearer {args.api_key}"} if args.api_key else {}
+    workload = {
+        "model": args.model, "turns": args.turns, "max_tokens": args.max_tokens,
+        "seed": args.seed, "temperature": args.temperature, "reasoning": args.reasoning,
+        "repeats": args.repeats, "prompts": TURNS_PROMPTS, "system": SYSTEM_PROMPT,
+        "cache_prompt": not args.no_cache_prompt,
+    }
+    report = {"schema_version": 1, "workload": workload, "results": [], "passed": False}
+    status = 1
     try:
-        r = requests.get(f"{args.url}/v1/models", headers=headers, timeout=5)
-        r.raise_for_status()
-        models_data = r.json()
-        print(f"✅ Connessione stabilita con successo a llama-server.")
-        print(f"   Modelli disponibili sul server: {[m.get('id') for m in models_data.get('data', [])]}")
-    except Exception as e:
-        print(f"❌ Impossibile contattare {args.url}: {e}")
-        print("   Assicurati che llama-server sia avviato (es. con genai-llamacpp.sh).")
-        sys.exit(1)
+        print(f"Target: {args.url} | Model: {args.model}", flush=True)
+        print(get_vram_stats(), flush=True)
+        with requests.get(f"{args.url}/v1/models", headers=headers, timeout=5) as response:
+            response.raise_for_status()
+            response.json()
+        for repeat in range(args.repeats):
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            for i in range(args.turns):
+                messages.append({"role": "user", "content": TURNS_PROMPTS[i % len(TURNS_PROMPTS)]})
+                payload = {
+                    "model": args.model, "messages": messages, "max_tokens": args.max_tokens,
+                    "temperature": args.temperature, "seed": args.seed, "stream": True,
+                    "stream_options": {"include_usage": True}, "timings_per_token": True,
+                    "chat_template_kwargs": {"enable_thinking": args.reasoning == "on"},
+                    "cache_prompt": not args.no_cache_prompt,
+                }
+                started = time.perf_counter()
+                with requests.post(f"{args.url}/v1/chat/completions", headers=headers,
+                                   json=payload, stream=True, timeout=args.timeout) as response:
+                    response.raise_for_status()
+                    result = read_completion(response)
+                elapsed = time.perf_counter() - started
+                messages.append({"role": "assistant", "content": result["content"],
+                                 "reasoning_content": result["reasoning_content"]})
+                first_at = result.pop("first_at")
+                result.update({
+                    "repeat": repeat + 1, "turn": i + 1, "ttft_s": first_at - started,
+                    "elapsed_s": elapsed, "tok_per_sec": result["timings"]["predicted_per_second"],
+                    "prefill_tps": result["timings"]["prompt_per_second"],
+                    "total_tokens": result["usage"]["completion_tokens"], "vram": get_vram_stats(),
+                })
+                report["results"].append(result)
+                print(f"Repeat {repeat + 1}, turn {i + 1}: {result['tok_per_sec']:.2f} t/s | "
+                      f"TTFT {result['ttft_s']:.3f}s | {result['total_tokens']} tokens | "
+                      f"{result['finish_reason']}", flush=True)
+        report["summary"] = summarize(report["results"])
+        if args.baseline:
+            report["comparison"] = compare_reports(json.loads(args.baseline.read_text()), report)
+        report["passed"] = True
+        status = 0
+        print(json.dumps(report["summary"], indent=2), flush=True)
+    except (requests.RequestException, OSError, ValueError, RuntimeError, KeyError, TypeError,
+            subprocess.SubprocessError) as error:
+        report["error"] = str(error)
+        print(f"BENCHMARK FAILED: {error}", file=sys.stderr)
+    finally:
+        if args.output:
+            args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    return status
 
-    messages = [
-        {"role": "system", "content": "Sei un assistente AI specializzato in architetture hardware e sistemi distribuiti. Rispondi in modo tecnico e conciso."}
-    ]
-
-    results = []
-    total_tokens_all_turns = 0
-
-    for i in range(args.turns):
-        turn_num = i + 1
-        prompt = TURNS_PROMPTS[i % len(TURNS_PROMPTS)]
-        messages.append({"role": "user", "content": prompt})
-
-        print(f"\n--- [Turno {turn_num}/{args.turns}] ----------------------------------------------------")
-        print(f"👤 User: {prompt[:80]}...")
-
-        payload = {
-            "model": args.model,
-            "messages": messages,
-            "max_tokens": args.max_tokens,
-            "temperature": 0.6,
-            "stream": True,
-            "stream_options": {"include_usage": True}
-        }
-
-        t_start = time.perf_counter()
-        t_first = None
-        assistant_reply = []
-        reasoning_tokens = 0
-        content_tokens = 0
-        timings = None
-
-        try:
-            resp = requests.post(
-                f"{args.url}/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                stream=True,
-                timeout=args.timeout
-            )
-            resp.raise_for_status()
-
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                line_text = line.decode("utf-8")
-                if line_text.startswith("data: "):
-                    data_str = line_text[6:].strip()
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                        if "timings" in chunk:
-                            timings = chunk["timings"]
-                        choices = chunk.get("choices", [])
-                        if choices:
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
-                            reasoning = delta.get("reasoning_content", "")
-                            if reasoning:
-                                if t_first is None:
-                                    t_first = time.perf_counter()
-                                reasoning_tokens += 1
-                                assistant_reply.append(reasoning)
-                                print("~", end="", flush=True)
-                            elif content:
-                                if t_first is None:
-                                    t_first = time.perf_counter()
-                                content_tokens += 1
-                                assistant_reply.append(content)
-                                print(".", end="", flush=True)
-                    except json.JSONDecodeError:
-                        pass
-
-            t_end = time.perf_counter()
-            print() # Nuova linea dopo i simboli
-
-            total_tokens = reasoning_tokens + content_tokens
-            full_reply = "".join(assistant_reply)
-            messages.append({"role": "assistant", "content": full_reply})
-
-            total_time = t_end - t_start
-            ttft = (t_first - t_start) if t_first else total_time
-            gen_time = (t_end - t_first) if t_first and (t_end > t_first) else total_time
-            tok_per_sec = (total_tokens / gen_time) if gen_time > 0 else 0
-
-            # Se llama-server fornisce i timings nativi interni, usiamo quelli per massima precisione
-            prefill_tps = None
-            server_gen_tps = None
-            mtp_rate = None
-            if timings:
-                prefill_tps = timings.get("prompt_per_second")
-                server_gen_tps = timings.get("predicted_per_second")
-                draft_n = timings.get("draft_n", 0)
-                draft_acc = timings.get("draft_n_accepted", 0)
-                if draft_n > 0:
-                    mtp_rate = (draft_acc / draft_n) * 100
-
-            vram_now = get_vram_stats()
-            total_tokens_all_turns += total_tokens
-
-            turn_data = {
-                "turn": turn_num,
-                "reasoning_tokens": reasoning_tokens,
-                "content_tokens": content_tokens,
-                "total_tokens": total_tokens,
-                "ttft_s": ttft,
-                "tok_per_sec": server_gen_tps or tok_per_sec,
-                "prefill_tps": prefill_tps,
-                "mtp_rate": mtp_rate,
-                "vram": vram_now
-            }
-            results.append(turn_data)
-
-            print(f"🤖 Bot ({total_tokens} tok [Ragionamento: {reasoning_tokens}, Risposta: {content_tokens}]): {full_reply[:70]}...")
-            
-            perf_str = f"⏱️  Prefill: {ttft:.3f}s"
-            if prefill_tps:
-                perf_str += f" ({prefill_tps:.1f} t/s)"
-            perf_str += f" | Generazione: {(server_gen_tps or tok_per_sec):.1f} tok/s"
-            if mtp_rate is not None:
-                perf_str += f" (MTP Hit: {mtp_rate:.1f}%)"
-            perf_str += f" | Tempo: {total_time:.2f}s"
-            print(perf_str)
-            print(f"📊 {format_vram(vram_now)}")
-
-        except requests.exceptions.Timeout:
-            print(f"\n❌ [TIMEOUT] Il server non ha risposto entro {args.timeout}s al Turno {turn_num}!")
-            print(f"   Possibile DEADLOCK o context shift bloccato.")
-            print(f"   VRAM attuale: {format_vram(get_vram_stats())}")
-            break
-        except Exception as e:
-            print(f"\n❌ [ERRORE] Eccezione al Turno {turn_num}: {e}")
-            print(f"   VRAM attuale: {format_vram(get_vram_stats())}")
-            break
-
-    # Riepilogo finale
-    print("\n" + "=" * 80)
-    print("📈 RIEPILOGO PRESTAZIONI & STABILITÀ")
-    print("=" * 80)
-    if results:
-        avg_speed = sum(r["tok_per_sec"] for r in results) / len(results)
-        max_speed = max(r["tok_per_sec"] for r in results)
-        avg_ttft = sum(r["ttft_s"] for r in results) / len(results)
-        prefill_vals = [r["prefill_tps"] for r in results if r.get("prefill_tps") is not None]
-        avg_prefill = (sum(prefill_vals) / len(prefill_vals)) if prefill_vals else None
-        mtp_vals = [r["mtp_rate"] for r in results if r.get("mtp_rate") is not None]
-        avg_mtp = (sum(mtp_vals) / len(mtp_vals)) if mtp_vals else None
-
-        print(f"Turni completati con successo : {len(results)}/{args.turns}")
-        print(f"Token totali generati         : {total_tokens_all_turns}")
-        print(f"Velocità media di generazione : {avg_speed:.2f} tok/s")
-        print(f"Velocità di picco             : {max_speed:.2f} tok/s")
-        if avg_prefill:
-            print(f"Velocità media di prefill     : {avg_prefill:.2f} tok/s")
-        if avg_mtp:
-            print(f"MTP Speculative Hit Rate medio: {avg_mtp:.1f}%")
-        print(f"Latenza media TTFT            : {avg_ttft:.3f}s")
-        if len(results) == args.turns:
-            print("🏆 STATO: NESSUN BLOCCO RILEVATO! La sessione multi-turno è stabile.")
-        else:
-            print("⚠️  STATO: BLOCCO RILEVATO! Esaminare i parametri di contesto e context-shift.")
-    else:
-        print("Nessun dato raccolto.")
-    print("=" * 80)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

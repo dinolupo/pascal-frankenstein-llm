@@ -32,7 +32,7 @@ genai-llamacpp.sh
 In un altro terminale, spostati in questa cartella ed esegui:
 
 ```bash
-cd ~/proj/genAI/qwen-pascal-lab
+cd /path/to/pascal-frankenstein-llm/scripts
 
 # Test sul profilo Vision (quello che si bloccava in Open WebUI)
 ./benchmark_stress.py --model "Qwen36 her vis" --turns 10 --max-tokens 384
@@ -40,6 +40,64 @@ cd ~/proj/genAI/qwen-pascal-lab
 # Test comparativo sul profilo testo
 ./benchmark_stress.py --model "Qwen36 her jin" --turns 10 --max-tokens 384
 ```
+
+### Gate per aggiornamenti del fork
+
+Il benchmark usa `usage.completion_tokens` e i timings nativi del server:
+i chunk SSE non sono token. Mantiene separati reasoning e risposta, e termina
+con codice nonzero su errori HTTP/SSE, timeout, stream incompleti, metriche
+mancanti o risposte senza contenuto finale. Il timeout misura inattivita dello
+stream, non la durata totale della richiesta. La telemetria VRAM e obbligatoria
+ed e campionata ai confini dei turni; per i picchi usare un monitor esterno.
+
+La chiave viene letta da `LLAMA_API_KEY` senza essere salvata nel report.
+I report contengono testo generato: conservarli localmente, non pubblicarli
+automaticamente. Usare una directory di risultati esterna a Git.
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_benchmark_stress.py'
+python3 scripts/benchmark_stress.py \
+  --url http://127.0.0.1:18081 --model "Qwen36 her jin" \
+  --turns 10 --max-tokens 384 --reasoning off \
+  --temperature 0.6 --seed 123 --repeats 3 --timeout 180 \
+  --output /path/to/results/baseline-text.json
+# Stessi parametri sul binario candidato:
+python3 scripts/benchmark_stress.py \
+  --url http://127.0.0.1:18081 --model "Qwen36 her jin" \
+  --turns 10 --max-tokens 384 --reasoning off \
+  --temperature 0.6 --seed 123 --repeats 3 --timeout 180 \
+  --baseline /path/to/results/baseline-text.json \
+  --output /path/to/results/candidate-text.json
+```
+
+Ripetere separatamente per `Qwen36 her vis`: una conversazione testuale con
+projector caricato non sostituisce un test funzionale con immagini.
+Il gate richiede tre repliche complete e workload identico: blocca perdite
+oltre 5% in generation, oltre 10% in prefill o aumenti oltre 10% in TTFT.
+Le statistiche includono la dispersione dei turni; non sono intervalli di
+confidenza. Verificare i casi borderline e la correttezza separatamente.
+Reasoning disabilitato nel controllo evita di esaurire 384 token prima della
+risposta finale; aggiungere prove funzionali con reasoning attivo.
+Ogni checkpoint deve usare gli stessi preset, template, pesi e warm-up.
+Non inferire prestazioni a 120k token da questo breve workload multi-turno.
+
+Per eseguire automaticamente entrambi i profili sul binario candidato:
+
+```bash
+python3 scripts/run-integration-gate.py \
+  --server llama.cpp/build-pascal-cuda/bin/llama-server \
+  --preset "$HOME/.local/share/pascal-frankenstein-llm/config/llama-models.ini" \
+  --results /path/to/results/baseline
+# Aggiungere --baseline /path/to/results/baseline per ogni checkpoint successivo.
+```
+
+Il runner rifiuta altri processi llama attivi e directory di risultati esistenti,
+avvia un server loopback sulla porta 18081, esegue warm-up e controlli aritmetici
+multi-turno/EOG e un'immagine rossa sul profilo vision, poi tre stress replications
+per profilo. Campiona VRAM e memoria host ogni due secondi e arresta il proprio
+server anche in caso di fallimento. Non modifica l'installazione. Usa i due alias
+operativi indicati sopra; un preset con alias differenti richiede adattamento
+esplicito. Questi smoke test non sostituiscono backend/logits o long-context.
 
 ---
 

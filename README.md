@@ -234,6 +234,9 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 
 ## Upstream work
 
+For incremental updates, attribution and mandatory functional/performance gates,
+see [the upstream integration procedure](doc/UPSTREAM_INTEGRATION.md).
+
 - [llama.cpp / GGML](https://github.com/ggml-org/llama.cpp): inference engine,
   GGUF ecosystem, kernels, and multi-GPU support.
 - [thecodacus/llama.cpp](https://github.com/thecodacus/llama.cpp): `perf`
