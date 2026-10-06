@@ -68,6 +68,49 @@ Il dry-run iniziale ha 398 notifiche di conflitto; `git cherry` rileva 677
 commit equivalenti e 27 non equivalenti. Approvata una patch stack attribuita
 sopra il tag, dopo i gate separati EOG/MMQ, anziche risolvere conflitti artificiali.
 
+### Gate separati EOG e MMQ
+
+Il primo candidato EOG ha dato 40,18 t/s testo (-7,40%) ed e stato bloccato:
+nessun avanzamento al fix seguente. La replica A2 sul sorgente originale,
+senza fix, ha dato 40,09 t/s testo e 39,49 t/s vision. Le risposte testo erano
+identiche alla baseline iniziale; EOG risultava +0,21% rispetto ad A2.
+Quindi la perdita non era attribuibile al fix dai dati disponibili.
+L'utente ha approvato A2 come riferimento contemporaneo, mantenendo i limiti
+5%/10%. Non trattare le oscillazioni successive come guadagni delle patch.
+
+| Checkpoint | Testo generation | Vision generation | Testo TTFT | Vision TTFT |
+| --- | ---: | ---: | ---: | ---: |
+| Controllo A2, sorgente originale | 40,09 t/s | 39,49 t/s | 0,845 s | 0,760 s |
+| EOG, replica completa accettata | 43,93 t/s | 43,72 t/s | 0,805 s | 0,720 s |
+| EOG + MMQ, accettato | 43,03 t/s | 43,05 t/s | 0,814 s | 0,722 s |
+
+Ogni riga usa tre conversazioni da dieci turni per profilo.
+EOG replica: prefill 87,37/66,97 t/s; MMQ: 86,26/66,68 t/s.
+MMQ rispetto al checkpoint EOG: generation -2,05%/-1,53%,
+prefill -1,26%/-0,42%, TTFT +1,07%/+0,31%. Gate superati sia rispetto
+ad A2 sia rispetto al checkpoint precedente.
+Passati build, sampling, smoke test aritmetici/multi-turno/EOG e immagine.
+Questi smoke test non provano ancora tutti i casi interni di rollback MTP.
+
+Commit locali del fork:
+- `bd567a37c`: backport attribuito di
+  ggml-org/llama.cpp#29638, solo common/sampling.cpp.
+- `d859c854e`: backport attribuito di
+  ggml-org/llama.cpp#29941 e due casi nel catalogo backend esistente.
+
+Il caso MMQ esatto (Q4_0, 512 esperti/10 selezionati, m=640, n=508,
+k=2560, ID randomizzati su tutti gli esperti) riproduce illegal memory access
+prima del fix, exit 134 su CUDA0. Dopo il fix passano su entrambe le GPU
+14 casi selezionati: i due broadcast/non-broadcast piu gli ID hot/cold skipped.
+Una prima fixture generica con le stesse dimensioni NON riproduceva il difetto:
+inizializzava gli ID soltanto sui primi dieci esperti. E stata sostituita dai
+casi corretti, usando l'inizializzatore randomizzato del test esistente.
+
+Evidenze locali: `files/control-a2`, `files/eog-repeat`, `files/mmq-candidate`
+nella sessione. Il runner conserva anche diff del sorgente non ancora
+committato e hash dei binari/librerie, e supporta `--previous` oltre a `--baseline`.
+Installazione e branch stabili ancora invariati; nessun push o deploy.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

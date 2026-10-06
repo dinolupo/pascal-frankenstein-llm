@@ -17,7 +17,7 @@ import zlib
 
 import requests
 
-from benchmark_stress import get_vram_stats
+from benchmark_stress import compare_reports, get_vram_stats
 
 
 def server_environment(server):
@@ -100,6 +100,7 @@ def main():
     parser.add_argument("--preset", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--previous", type=Path, help="Also compare previous accepted checkpoint")
     parser.add_argument("--port", type=int, default=18081)
     parser.add_argument("--max-tokens", type=int, default=384)
     parser.add_argument("--reasoning", choices=("on", "off"), default="off")
@@ -115,6 +116,10 @@ def main():
         probe.bind(("127.0.0.1", args.port))
     args.results.mkdir(parents=True)
     url = f"http://127.0.0.1:{args.port}"
+    source_diff = subprocess.check_output(
+        ["git", "-C", str(args.server.resolve().parent), "diff", "HEAD"],
+    )
+    (args.results / "source.diff").write_bytes(source_diff)
     metadata = {
         "server": str(args.server.resolve()),
         "preset": str(args.preset.resolve()),
@@ -126,6 +131,11 @@ def main():
             ["git", "-C", str(args.server.resolve().parent), "rev-parse", "HEAD"], text=True,
         ).strip(),
         "server_sha256": hashlib.sha256(args.server.read_bytes()).hexdigest(),
+        "library_sha256": {
+            library.name: hashlib.sha256(library.read_bytes()).hexdigest()
+            for library in sorted(args.server.resolve().parent.glob("*.so*"))
+        },
+        "source_diff_sha256": hashlib.sha256(source_diff).hexdigest(),
         "passed": False,
     }
     stop = threading.Event()
@@ -134,10 +144,11 @@ def main():
     server = None
     sampler = None
     try:
-        if args.baseline:
-            reference = json.loads((args.baseline / "gate.json").read_text())
-            if not reference.get("passed") or reference["preset_sha256"] != metadata["preset_sha256"]:
-                raise ValueError("Baseline gate failed or preset changed")
+        for reference_path in (args.baseline, args.previous):
+            if reference_path:
+                reference = json.loads((reference_path / "gate.json").read_text())
+                if not reference.get("passed") or reference["preset_sha256"] != metadata["preset_sha256"]:
+                    raise ValueError("Reference gate failed or preset changed")
         with (args.results / "server.log").open("w") as log:
             server = subprocess.Popen(
                 [str(args.server.resolve()), "--models-preset", str(args.preset.resolve()),
@@ -192,6 +203,10 @@ def main():
                 with (args.results / f"{profile}.log").open("w") as output:
                     subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,
                                    env=environment, check=True)
+                if args.previous:
+                    report = json.loads((args.results / f"{profile}.json").read_text())
+                    previous = json.loads((args.previous / f"{profile}.json").read_text())
+                    metadata[f"previous_{profile}_comparison"] = compare_reports(previous, report)
                 if errors:
                     raise RuntimeError(f"Memory monitor failed: {errors}")
             metadata["passed"] = True

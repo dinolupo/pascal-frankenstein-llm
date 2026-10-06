@@ -99,6 +99,25 @@ server anche in caso di fallimento. Non modifica l'installazione. Usa i due alia
 operativi indicati sopra; un preset con alias differenti richiede adattamento
 esplicito. Questi smoke test non sostituiscono backend/logits o long-context.
 
+### Regressione padding MMQ
+
+Il catalogo di test-backend-ops contiene i due casi dimensionali segnalati in
+ggml-org/llama.cpp#29941: Q4_0, 512 esperti, 10 selezionati, m=640, n=508,
+k=2560, input con/senza broadcast. Gli ID randomizzati coprono tutti gli
+esperti e sono una vista strided, come nel caso originale.
+Eseguire senza server modello attivo:
+
+```bash
+llama.cpp/build-pascal-cuda/bin/test-backend-ops test -b CUDA0 \
+  -o MUL_MAT_ID -p 'n_mats=512.*m=640.*n=508'
+llama.cpp/build-pascal-cuda/bin/test-backend-ops test -b CUDA1 \
+  -o MUL_MAT_ID -p 'n_mats=512.*m=640.*n=508'
+```
+
+I casi sono relativamente grandi (circa 450 MiB di pesi ciascuno), quindi
+usarli con un singolo worker e senza processi modello concorrenti.
+Il catalogo copre separatamente gli ID hot/cold `-1`.
+
 ---
 
 ## 🔍 Parametri Chiave Individuati per il Fix
