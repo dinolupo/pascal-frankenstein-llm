@@ -34,32 +34,32 @@ for executable in llama-cli llama-server llama-bench llama-moe-trace; do
         printf 'missing executable: %s\n' "$bin_dir/$executable" >&2
         exit 1
     fi
-    if [[ -n "$(git -C "$source_root" status --porcelain)" ]]; then
-        printf 'fork checkout must be clean before packaging\n' >&2
-        exit 1
-    fi
-    if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
-        printf 'project checkout must be clean before packaging\n' >&2
-        exit 1
-    fi
-    fork_commit=$(git -C "$source_root" rev-parse HEAD)
-    for executable in llama-cli llama-server llama-bench llama-moe-trace; do
-        binary_version=$(env -u GGML_CUDA_P2P LD_LIBRARY_PATH="$bin_dir" \
-            "$bin_dir/$executable" --version 2>&1)
-        embedded_commit=$(printf '%s\n' "$binary_version" |
-            sed -nE 's/^version:.*commit ([0-9a-f]{7,40})\).*/\1/p')
-        if [[ -z "$embedded_commit" ]] ||
-           [[ "$(git -C "$source_root" rev-parse "${embedded_commit}^{commit}")" != "$fork_commit" ]]; then
-            printf 'binary/source mismatch: %s\n%s\n' "$executable" "$binary_version" >&2
-            exit 1
-        fi
-    done
 done
 
 if ! git -C "$source_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     printf 'set FORK_SOURCE_ROOT to the llama.cpp fork checkout\n' >&2
     exit 1
 fi
+if [[ -n "$(git -C "$source_root" status --porcelain)" ]]; then
+    printf 'fork checkout must be clean before packaging\n' >&2
+    exit 1
+fi
+if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
+    printf 'project checkout must be clean before packaging\n' >&2
+    exit 1
+fi
+fork_commit=$(git -C "$source_root" rev-parse HEAD)
+for executable in llama-cli llama-server llama-bench llama-moe-trace; do
+    binary_version=$(env -u GGML_CUDA_P2P LD_LIBRARY_PATH="$bin_dir" \
+        "$bin_dir/$executable" --version 2>&1)
+    embedded_commit=$(printf '%s\n' "$binary_version" |
+        sed -nE 's/^version:.*commit ([0-9a-f]{7,40})\).*/\1/p')
+    if [[ -z "$embedded_commit" ]] ||
+       [[ "$(git -C "$source_root" rev-parse "${embedded_commit}^{commit}")" != "$fork_commit" ]]; then
+        printf 'binary/source mismatch: %s\n%s\n' "$executable" "$binary_version" >&2
+        exit 1
+    fi
+done
 
 mkdir -p "$dist_dir"
 stage_dir=$(mktemp -d "$dist_dir/.package.XXXXXX")
