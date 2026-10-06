@@ -10,6 +10,413 @@ conservate per riproducibilità storica; non sono l'ambiente operativo corrente.
 
 ---
 
+## Integrazione v0.6.0: baseline del sorgente attuale (6 ottobre 2026)
+
+Branch candidati: `integration/llama-v0.6.0` nel progetto e
+`pascal-integration-v0.6.0` nel fork. Installazione quotidiana invariata.
+Sorgente di riferimento `47b3df22d0b1f031c2d5a1cff359a25282138c01`,
+build Release, CUDA 12.9.86, GCC 13.3, `sm_61`, test abilitati, Make `-j4`.
+P2P non abilitato; CUDA Graphs disabilitati su Pascal e NCCL assente.
+Build, `test-sampling` e test backend `RMS_NORM,SCALE,MUL_MAT_ID`
+su CUDA0/CUDA1 superati.
+
+Pesi Heretic Native-MTP-Preserved:
+SHA-256 `fc89d92377b27fe0f80eb683a5105d0921234c24f7c1d70ecc2356ddf994d781`;
+projector BF16:
+`d6050bb82a0187e1b0655f1c5daef60c9479273fbd7402ff25d3137df2e071ce`.
+Profilo routing installato:
+`1ad2a9636abd70291a177f25fed859edb4d00365599db593bdea151f6f5e5e0f`;
+template Jinja:
+`e57684bae4156211a55473c5a63be976a405a37ab5be5ae0e5abf1df5349c4b2`.
+INI operativo:
+`0193ae3b51c678b6f75ddeeeeb86bedfb5124b661b7006d8ef9907c6470fce1d`.
+
+Il runner usa i preset installati, un server proprio su loopback:18081 e
+un modello alla volta. Testo: 128k allocato, cache `160,108`;
+vision: 64k allocato, cache `130,108`, projector su GPU.
+Entrambi: Q8 K/V, batch/ubatch 512, `-ncmoe 33`, split `10,7`,
+MTP `n-max=2`, un solo slot e no-context-shift.
+Workload controllato: reasoning off, temperatura 0.6, seed 123,
+10 turni x 3 conversazioni, massimo 384 token per risposta, cache prompt attiva.
+Warm-up escluso dalle misure. Contesto popolato registrato per turno nei
+timings/usage JSON; queste conversazioni NON costituiscono test long-context.
+
+| Profilo | Turni validi | Generation media | Prefill medio | TTFT medio |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 30/30 | 43,39 t/s | 87,18 t/s | 0,806 s |
+| Vision, richieste testuali | 30/30 | 36,71 t/s | 61,26 t/s | 0,784 s |
+
+Deviazioni standard fra turni, non intervalli di confidenza:
+generation 3,02/4,56 t/s, prefill 43,39/4,85 t/s, TTFT 0,446/0,115 s.
+Passati i controlli aritmetici multi-turno con stop normale, e la richiesta
+immagine rossa sul profilo vision. Campioni RAM/swap e VRAM per GPU ogni
+due secondi nei log locali. La velocita usa token e timings del server,
+non il numero di chunk SSE.
+
+La prima prova `baseline-current` e stata invalidata e interrotta: il runner
+impostava `GGML_CUDA_P2P=0`, ma il fork controlla la presenza della variabile.
+Corretto il runner per rimuoverla completamente; solo `baseline-v2` e valido.
+Una ripartenza ha inoltre rivelato TIME_WAIT sulla porta: il controllo
+preliminare ora usa SO_REUSEADDR, senza consentire due server concorrenti.
+Il runner corretto ha completato entrambi i profili e arrestato il proprio server.
+
+Risultati grezzi conservati nella directory `files/baseline-v2` della sessione
+Copilot; non versionare log, risposte, pesi o build.
+Procedura ripetibile in [UPSTREAM_INTEGRATION.md](UPSTREAM_INTEGRATION.md).
+Il tag ufficiale v0.6.0 risolve a `d81235049384534c167caea52b85a694f6103d14`.
+Il dry-run iniziale ha 398 notifiche di conflitto; `git cherry` rileva 677
+commit equivalenti e 27 non equivalenti. Approvata una patch stack attribuita
+sopra il tag, dopo i gate separati EOG/MMQ, anziche risolvere conflitti artificiali.
+
+### Gate separati EOG e MMQ
+
+Il primo candidato EOG ha dato 40,18 t/s testo (-7,40%) ed e stato bloccato:
+nessun avanzamento al fix seguente. La replica A2 sul sorgente originale,
+senza fix, ha dato 40,09 t/s testo e 39,49 t/s vision. Le risposte testo erano
+identiche alla baseline iniziale; EOG risultava +0,21% rispetto ad A2.
+Quindi la perdita non era attribuibile al fix dai dati disponibili.
+L'utente ha approvato A2 come riferimento contemporaneo, mantenendo i limiti
+5%/10%. Non trattare le oscillazioni successive come guadagni delle patch.
+
+| Checkpoint | Testo generation | Vision generation | Testo TTFT | Vision TTFT |
+| --- | ---: | ---: | ---: | ---: |
+| Controllo A2, sorgente originale | 40,09 t/s | 39,49 t/s | 0,845 s | 0,760 s |
+| EOG, replica completa accettata | 43,93 t/s | 43,72 t/s | 0,805 s | 0,720 s |
+| EOG + MMQ, accettato | 43,03 t/s | 43,05 t/s | 0,814 s | 0,722 s |
+
+Ogni riga usa tre conversazioni da dieci turni per profilo.
+EOG replica: prefill 87,37/66,97 t/s; MMQ: 86,26/66,68 t/s.
+MMQ rispetto al checkpoint EOG: generation -2,05%/-1,53%,
+prefill -1,26%/-0,42%, TTFT +1,07%/+0,31%. Gate superati sia rispetto
+ad A2 sia rispetto al checkpoint precedente.
+Passati build, sampling, smoke test aritmetici/multi-turno/EOG e immagine.
+Questi smoke test non provano ancora tutti i casi interni di rollback MTP.
+
+Commit locali del fork:
+- `bd567a37c`: backport attribuito di
+  ggml-org/llama.cpp#29638, solo common/sampling.cpp.
+- `d859c854e`: backport attribuito di
+  ggml-org/llama.cpp#29941 e due casi nel catalogo backend esistente.
+
+Il caso MMQ esatto (Q4_0, 512 esperti/10 selezionati, m=640, n=508,
+k=2560, ID randomizzati su tutti gli esperti) riproduce illegal memory access
+prima del fix, exit 134 su CUDA0. Dopo il fix passano su entrambe le GPU
+14 casi selezionati: i due broadcast/non-broadcast piu gli ID hot/cold skipped.
+Una prima fixture generica con le stesse dimensioni NON riproduceva il difetto:
+inizializzava gli ID soltanto sui primi dieci esperti. E stata sostituita dai
+casi corretti, usando l'inizializzatore randomizzato del test esistente.
+
+Evidenze locali: `files/control-a2`, `files/eog-repeat`, `files/mmq-candidate`
+nella sessione. Il runner conserva anche diff del sorgente non ancora
+committato e hash dei binari/librerie, e supporta `--previous` oltre a `--baseline`.
+Installazione e branch stabili ancora invariati; nessun push o deploy.
+
+### Stack operativo sul tag v0.6.0: candidato non ancora promosso
+
+Branch del fork `pascal-v0.6.0-stack`, base ufficiale `d812350493`.
+Cache/tracing `ac743f81f`, overlap `0ac3d9b27`, adattamento Pascal
+`47b3df22d`, contratto dispatcher `08fa762f7`, hook Laguna/Qwen4Exp
+`8e5bc28c7`/`5a0a2b60f` e dipendenze host-register/prefetch
+`20f5994bf`/`1163cb349`/`5f83fbbe7` sono stati adattati insieme.
+Le nuove fusioni shared-expert, gli operatori FFN upstream e la nuova API MTP
+sono conservati: non e stato reintrodotto il precedente `model_shared`.
+Host registration e prefetch restano opt-in, spenti durante queste misure;
+il loro percorso attivo non e ancora validato.
+
+Build separata `build-pascal-v060`, con gli stessi flag CUDA 12.9/sm_61,
+superata per server, bench, tracer e test. Sampling e 11 test offline superati.
+Su ciascuna GPU passano 58 test RMS_NORM/SCALE e 14 test MMQ esatti/ID mascherati.
+Passano aritmetica, richiamo multi-turno, stop normale e immagine rossa.
+Il checkpoint completo a T=0,6 resta **bloccato dalla TTFT vision**:
+
+| Profilo | Generation | Prefill | TTFT | Esito rispetto ad A2 |
+| --- | ---: | ---: | ---: | --- |
+| Testo | 45,27 t/s | 84,88 t/s | 0,816 s | Superato |
+| Vision | 43,25 t/s | 79,20 t/s | 0,950 s | TTFT +24,99%, bloccato |
+
+Entrambi hanno 30 turni completi, con gli stessi asset, preset e parametri
+della baseline. Le risposte e le storie risultanti non sono pero identiche
+tra versioni a temperatura positiva.
+Il debug upstream `LLAMA_SERVER_SLOTS_DEBUG=1` riproduce una tokenizzazione
+generata non canonica: due token per "col"+"lo" vengono ritokenizzati in un
+unico token per "collo". Il testo non cambia, ma cambia il prefisso dei token.
+Uno spazio finale eliminato dal `trim` del template provoca un'altra divergenza.
+La memoria ibrida deve ripristinare un checkpoint e rivalutare il suffisso:
+al turno vision 3 il candidato valuta 434 token invece dei 48 del checkpoint
+MMQ, con 519 token cached invece di 906; TTFT 2,332 s contro 0,743 s.
+Non forzare il riuso di KV/stato quando gli ID non coincidono.
+
+Come controllo diagnostico previsto dal protocollo sono stati eseguiti
+due gate completi greedy, cambiando soltanto T da 0,6 a 0. Il controllo
+maintenance usa `d859c854e`, ricompilato sul proprio branch pulito.
+Il candidato e stato poi ripristinato byte per byte: SHA-256 del diff
+`6a7e5da5516fd7e8efc39a8f6b2360e55bc481d409561c796f75da0c50276deb`.
+I binari separati provengono dalla build di quel medesimo sorgente.
+
+| Sorgente/profilo, T=0 | Generation | Prefill | TTFT |
+| --- | ---: | ---: | ---: |
+| Maintenance testo | 44,14 t/s | 85,77 t/s | 0,831 s |
+| v0.6.0 testo | 43,56 t/s | 84,64 t/s | 0,793 s |
+| Maintenance vision | 43,89 t/s | 66,78 t/s | 0,718 s |
+| v0.6.0 vision | 44,62 t/s | 64,35 t/s | 0,742 s |
+
+Tre conversazioni da dieci turni per riga, controlli funzionali inclusi.
+Delta candidato: testo generation -1,32%, prefill -1,32%, TTFT -4,57%;
+vision generation +1,65%, prefill -3,65%, TTFT +3,27%.
+Il controllo greedy supera tutti i limiti 5%/10%, ma **non sostituisce
+automaticamente il gate T=0,6** e non prova equivalenza byte per byte.
+
+Picchi globali delle due GPU, comprendenti il display e i due profili:
+T=0,6 candidato 10255/7942 MiB; greedy maintenance 10256/7938 MiB;
+greedy candidato 10242/7942 MiB. Picchi MemTotal-MemAvailable:
+11125/7586/10327 MiB rispettivamente; swap occupato 4690/4862/5672 MiB.
+Sono misure globali di sistema, non RSS del solo modello ne prova di swap I/O.
+I prompt effettivamente popolati raggiungono al massimo 2141/1536 token
+nel candidato T=0,6, 3942/1226 nel controllo greedy e 2954/1550 nel candidato
+greedy (testo/vision): nessuna di queste prove valida il long context.
+
+L'utente ha successivamente approvato di proseguire con i preset invariati,
+accettando compromessi di latenza spiegati e documentati. Il gate ora mantiene
+la modalita stretta predefinita e offre un'eccezione TTFT esplicita con motivazione;
+generation/prefill, correttezza e misure incomplete restano bloccanti.
+13 test offline verificano soglie, eccezione isolata e fallimenti misti.
+Il nuovo run completo `v060-core-policy`, stesso sorgente e T=0,6, misura
+44,62/42,96 t/s, prefill 84,67/79,23 t/s e TTFT 0,778/0,917 s (testo/vision),
+30 turni per profilo e controlli funzionali/immagine superati.
+Vision: TTFT +20,61% (+0,157 s) rispetto ad A2 e +26,96% (+0,195 s) rispetto
+al checkpoint MMQ. Generation rispetto a MMQ: +3,70% testo, -0,21% vision.
+L'esecuzione e accettata secondo la politica esplicita, ma le soglie TTFT
+restano segnate come violate nel report. Non e una certificazione di speedup
+ne una promozione completa: gli altri test e gruppi di compatibilita restano.
+
+### Primo checkpoint operativo v0.6.0 accettato
+
+Commit locale del fork `4d0ac3bdb`, gruppo cache/overlap/Pascal/prefetch
+attribuito ai commit originali elencati nel messaggio. Il nuovo test
+`test-moe-scheduler` assegna grafi CUDA0/CUDA1/CUDA0 e controlla numericamente
+tre esecuzioni, con prefetch spento/acceso e con tutte le route mascherate.
+Rimuovendo la correzione dell'ownership degli eventi, la fixture corretta
+con ID univoci riproduce `CUDA error: invalid resource handle`, exit 134.
+Con la correzione i risultati passano. Una prima fixture con ID duplicati
+produceva risultati errati anche senza prefetch ed e stata invalidata:
+non e evidenza della regressione.
+Gli slot/eventi del prefetch vengono sincronizzati e ricreati al cambio GPU;
+nessun P2P. Il caso tutte-route-negative non accede oltre il bitset.
+
+Test funzionali separati, MTP off e contesto 128k allocato:
+cache `0`, `64`, `0,64` passano aritmetica, EOG e richiamo multi-turno.
+Il test input invalido ha scoperto che `64,` veniva accettato come quota
+singola: corretto il parser CLI/env per non perdere voci vuote.
+Verificato il rifiuto esplicito di `-1`, `64,invalid`, `64,`, `64/`,
+`64,,32` e `,64`. Sampling e 14 casi MMQ/ID mascherati per GPU ripassati.
+Tutte le modifiche del gruppo sono state ricompilate insieme.
+
+Gate finale `v060-core-final`, 30 turni per profilo e controlli funzionali/
+immagine: testo 45,64 t/s, prefill 84,55 t/s, TTFT 0,777 s;
+vision 42,93 t/s, prefill 78,94 t/s, TTFT 0,920 s.
+Vision TTFT +27,43% (+0,198 s) rispetto al maintenance MMQ, accettato con
+motivazione esplicita; violazione ancora visibile nel report.
+Non si certifica ancora uno speedup: confronti finali ravvicinati A/B
+e test release-wide restano da eseguire.
+
+La fase opzionale TurboQuant non e stata applicata: il replay esplorativo
+di `170322f8d` (94 file, circa 20k righe aggiunte, molti backend) rivela
+conflitti strutturali anche su Metal, dove upstream ha sostituito lo shader
+monolitico con kernel separati. Il replay non validato e stato rimosso
+soltanto dai percorsi appena modificati, tornando al checkpoint pulito.
+Serve chiarire il perimetro dei backend prima di un porting non verificabile
+sull'hardware disponibile. Il pin del progetto e ancora il maintenance;
+installazione e remoti invariati.
+
+Evidenze locali: `files/v060-core`, `files/v060-prefix-debug.log`,
+`files/greedy-maintenance`, `files/greedy-v060`, diff e log della build
+nella sessione. Il pin del progetto resta `d859c854e`; nessun commit di
+promozione v0.6.0, push o installazione. Restano aperti la decisione sul
+gate prestazionale, gli altri gruppi del fork e la validazione release-wide.
+
+## Port opzionale CPU/CUDA Pascal validato
+
+L'utente ha scelto di conservare le funzionalita CPU/CUDA Pascal e lasciare
+invariati i sorgenti degli altri backend upstream, senza certificare TurboQuant
+su Metal/Vulkan/HIP/MUSA/SYCL. Il gruppo e nel commit locale del fork
+`7760081b1`, sopra il gruppo operativo `4d0ac3bdb` e il tag ufficiale.
+Origine attribuita: `170322f8d` e interfacce cache miste `4cd54c684`.
+Il Q2_0 CUDA piu recente e gia upstream: non e stato sovrascritto con
+`933820717`. La fusione Turbo MMA `40f20368d` richiede Tensor Core e non
+appartiene al perimetro Pascal. Corretto il contratto della nuova API attention,
+con rotazione Q centralizzata; conservati top-k e precisione upstream.
+
+I nuovi test hanno scoperto e riprodotto due difetti del vecchio upload Turbo:
+indici broadcast errati e gruppi WHT da 64 elementi trattati come blocchi packed
+da 128, con scritture/quantizzazione non corrette. Corrette tutte le varianti;
+il layout serialized resta invariato. Eliminato anche lo stato globale mutabile
+del gruppo WHT CPU. I convertitori CUDA TQ erano presenti ma il dispatcher
+saltava le moltiplicazioni: ora usano la dequantizzazione/cuBLAS esistente,
+senza fingere l'esistenza di kernel MMVQ/MMQ per quei codec. MUL_MAT_ID TQ
+resta sul fallback CPU, non viene pubblicizzato come kernel CUDA.
+
+Build Release CUDA 12.9/sm_61 superata. Su **ciascuna GPU** passano
+128 casi numerici realmente eseguiti: WHT forward/inverse, gruppi 64/128,
+SET_ROWS broadcast e view, 21 coppie K/V Turbo/F16/Q8 in decode e prefill,
+Q2_0 e TQ3_1S/TQ4_1S matmul. Nessun caso selezionato saltato.
+Il test registrato `test-turbo-quant` verifica 18 round trip con limiti
+numerici espliciti, non restituisce piu successo dopo aver soltanto stampato
+gli errori. Restano superati sampling, quantizzazione CPU e 13 test offline
+del benchmark. Sei configurazioni del modello reale passano aritmetica,
+EOG e richiamo: Turbo2/3/4 con MTP, due cache miste senza MTP e Turbo3 CPU-only.
+Questi smoke test non certificano la qualita generale delle cache lossy.
+
+Gate finale `v060-turbo-final`, preset operativi **ancora Q8 K/V**, T=0,6,
+tre conversazioni da dieci turni per profilo, con immagine e controlli:
+
+| Profilo | Generation | Prefill | TTFT | Delta generation vs gruppo core |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 45,18 t/s | 84,61 t/s | 0,804 s | -1,02% |
+| Vision | 43,36 t/s | 79,00 t/s | 0,931 s | +1,00% |
+
+Gate accettato. TTFT vision rispetto ad A2: +22,46%, +0,171 s, ancora
+registrata come violazione con eccezione esplicita. Rispetto al gruppo core
+e +1,16%, +0,011 s. **Nessuno speedup complessivo certificato**: manca il
+confronto finale ravvicinato e ripetuto con sorgente originale e maintenance.
+Evidenze: `files/turbo-blas-CUDA0.log`, `files/turbo-blas-CUDA1.log`,
+`files/turbo-roundtrip-final.log`, `files/turbo-model-smoke`,
+`files/v060-turbo-final` nella sessione.
+
+L'inventario ha inoltre confermato un contratto non equivalente a upstream:
+gli export MTP legacy con `--mtp-shared-embd`, metadata
+`nextn_shared_target_tensors` e `llama_model_params.model_shared`.
+La v0.6.0 usa invece export draft autosufficienti; non basta classificare
+queste patch come gia presenti. Anche il rifiuto esplicito di un Qwen4Exp
+draft-only usato come target va conservato/adattato. Serve decidere la politica
+di retrocompatibilita prima di dichiarare completa la parita del fork.
+La decisione successiva e registrata nella sezione seguente.
+Non sono stati scaricati pesi Qwen4Exp per simulare una certificazione assente.
+Host registration/prefetch sul modello reale, validazione release-wide,
+contesti sostanzialmente popolati e pin finale restano aperti.
+Installazione, INI e remoti invariati; pin del progetto ancora `d859c854e`.
+
+## Migrazione MTP autosufficiente e controllo energetico
+
+L'utente ha scelto gli export upstream autosufficienti: niente ripristino di
+`model_shared` o `--mtp-shared-embd`. Re-esportare dai pesi sorgente con `--mtp`
+senza il vecchio flag, oppure mantenere il modello completo per `draft-mtp`.
+Gli asset operativi Native-MTP-Preserved non richiedono conversione. Rimuovere
+il metadata legacy non ricrea embeddings/head mancanti.
+
+Checkpoint locale del fork `590b56282`: rifiuto esplicito del metadata legacy,
+guardia Qwen4Exp draft-only come target adattata da `d2939cd9f`, quattro test
+reali del contratto export senza pesi esterni e istruzioni di migrazione.
+Build, nove CTest mirati e architetture sintetiche CPU/CUDA0/CUDA1 superati.
+Le due GPU concordano con il riferimento CPU (NMSE circa 3e-14/5e-14),
+roundtrip e ordine batch misto passano. Queste prove non certificano
+l'inferenza Qwen4Exp reale o il suo MTP con pesi non disponibili.
+L'inventario dei 27 commit non equivalenti e completo nel runbook.
+
+L'utente ha autorizzato la politica runtime Prefer maximum performance.
+Il client `nvidia-settings` 615.71.09 su driver 580.178.04 dichiarava assegnato
+`1`, ma restituiva `0` anche senza config, con CUDA attivo e sugli stessi UUID.
+La verifica diretta NV-CONTROL ha letto inizialmente `2`, quindi `1` dopo
+assegnazione sincronizzata; una nuova connessione legge ancora `1` su entrambe.
+Non sono stati cambiati driver, installazione, clock o limiti di potenza.
+La discrepanza CLI/NV-CONTROL e registrata, non reinterpretata come stato P0/P2.
+Il gate ora puo verificare gli UUID e la preferenza prima, durante e dopo
+ciascuna prova (`--require-max-performance`); fallimenti e copertura incompleta
+non vengono trasformati in successo. La modalita predefinita resta invariata.
+
+Il primo gate `v060-mtp-migration` e stato interrotto perche la politica e
+cambiata durante la prova: **escluso** da ogni confronto. Replica completa
+`v060-mtp-migration-max`: 30 turni per profilo, controlli aritmetici/EOG,
+riuso prefisso e immagine, 134 campioni energetici tutti su `1`.
+Preset Q8, T=0,6 e tutti gli asset invariati:
+
+| Profilo | Generation | Prefill | TTFT | Generation vs opzionale |
+| --- | ---: | ---: | ---: | ---: |
+| Testo | 44,80 t/s | 84,17 t/s | 0,841 s | -0,83% |
+| Vision | 42,94 t/s | 78,88 t/s | 0,925 s | -0,97% |
+
+Gate accettato; TTFT vision vs A2 +21,67%, +0,165 s, con la precedente
+eccezione motivata. I vecchi riferimenti non avevano verifica della politica:
+non usare questi delta per certificare speedup. Restano i controlli ravvicinati
+originale/maintenance/candidato, le prove release-wide e il pin finale.
+Gli hash dei binari/librerie e il diff completo pre-commit sono nell'evidenza;
+il gate successivo verifica anche il commit incorporato in `--version`,
+separato dall'HEAD corrente dei vecchi build di controllo.
+
+## Osservabilita prefetch e verifiche release native
+
+Il checkpoint `988518731` aggiunge solo un DEBUG al vero upload degli esperti:
+non cambia scheduling, routing o allocazione. Build, nove CTest e fixture
+scheduler multi-GPU superati. Gate operativo r3 a flag opt-in spenti:
+testo 44,56 t/s, prefill 84,13 t/s, TTFT 0,828 s; vision 41,60 t/s,
+prefill 77,58 t/s, TTFT 0,942 s. Gate accettato con la precedente eccezione
+solo-latenza; nessuno speedup certificato da confronti storici.
+
+Smoke reali superati: aritmetica/EOG/riuso prefisso, reasoning con contenuto
+non vuoto, JSON con schema non vincolato alla risposta, tool call e prosecuzione,
+MTP spento, cache spenta e quota scalare 64. Configurazioni diagnostiche generate
+solo nella sessione; INI installato invariato.
+
+Su Linux nativo, mmap read-only privato/condiviso e trasferimenti esatti
+H2D/D2H su entrambe le GPU passano; passa anche una registrazione MAP_SHARED
+da 16 GiB. Il primo probe confrontava erroneamente `cudaHostGetFlags` con i
+flag di `cudaHostRegister`: quell'API descrive allocazioni HostAlloc, non
+certifica i flag della registrazione. Il probe corretto verifica successo
+dell'API, contenuto trasferito e unregister, senza quell'asserzione.
+
+Un load del router con polling GPU attivo ha superato il timeout di 300 s
+vicino al termine. Il primo range da 17.027.633.152 byte torna invece `true`
+nelle verifiche dirette del loader. Le repliche reali senza polling, con
+polling differito e con polling precoce ripristinato **passano tutte**.
+La causa del timeout resta irrisolta: la sequenza non dimostra un deadlock
+causato dalla telemetria, ne l'assenza di supporto per host registration.
+Nessuna modifica a mmap, chunking o algoritmo di registrazione del fork.
+
+Tre coppie register-on/register-prefetch superate, con 16.238,82 MiB
+effettivamente pinned e 396 upload osservati in ciascun caso prefetch.
+Prompt large-batch effettivo 1.850 token, risposta `323`, stop normale.
+Nel caso con deferral: register-on 3 campioni RAM-only e 5 completi;
+register-prefetch 3 RAM-only e 6 completi, tutti i modi osservati su `1`.
+Il runner evita precauzionalmente probe GPU durante i load registrati;
+la lacuna di copertura GPU/power e esplicita, la telemetria completa riprende
+dopo warm-up. Registrazione/prefetch restano opt-in e non sono promossi come
+ottimizzazione di velocita: le repliche brevi sono screening, non baseline.
+
+Il candidato e stato ricompilato dal commit pulito `988518731`, versione
+incorporata `0.6.0-dev`, con toolchain/flag invariati. Nove CTest superati;
+22 test offline degli strumenti di misura superati.
+
+## Screening long-context sul rebuild e prerelease v0.4.0
+
+Il rebuild pulito `988518731` passa recupero oggettivo di tre codici distribuiti
+nel prompt, JSON non vincolato alle risposte, stop e prosecuzione cached:
+3.807 token in 16,68 s; 58.698 token sul preset vision 64k in 328,74 s;
+117.503 token sul preset testo 128k in 771,85 s. Input solo testo anche sul
+profilo vision. Una cold repetition per profilo: screening r1, non baseline
+long-context o certificazione generale di qualita.
+
+Primo tentativo: risposte 4k/64k corrette ma timeout di un probe GPU da 10 s,
+gate fallito. Replica seguente interrotta prima del risultato 128k; il terzo
+screening completo passa con probe VRAM/power bounded a 60 s, senza query
+clock/temperatura. 571 campioni, modi osservati tutti `1`, durata massima probe
+0,056 s; picchi VRAM 10.905/7.956 MiB, minimo MemAvailable 21.751.716 kB,
+massimo swap usato 2.129.192 kB. Nessuna cancellazione delle evidenze fallite.
+
+La prerelease del progetto v0.4.0 usa lo stack di quattro commit sul tag
+ufficiale v0.6.0, pin `988518731`. Il confronto ravvicinato finale fra originale,
+maintenance e candidato **non e stato eseguito**; nessuno speedup certificato.
+Installazione locale e INI restano invariati. Vedi le note v0.4.0 per migrazione
+MTP, limiti backend/architetture e procedura di installazione.
+
+Preparazione release: ricompilati tutti i quattro eseguibili, incluso
+`llama-cli` assente dal build precedente. Nove CTest e 23 test offline passano;
+archivio/checksum, manifest interno e installazione in HOME isolata verificati.
+Il server estratto passa aritmetica/EOG/prefisso su entrambi i preset e immagine
+rossa sul vision. Preferenza corrente `2` su entrambe le GPU, non modificata:
+questa replica e solo funzionale e non aggiunge evidenza di performance.
+Packager: verifica clean source e commit incorporato in tutti i binari,
+include licenze, documentazione e strumenti; rifiuta overwrite e versioni
+non valide. Il fork `pascal-v0.6.0-stack` e stato pubblicato prima del parent.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

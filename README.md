@@ -216,6 +216,18 @@ that same device.
 
 ## Build
 
+### v0.4.0 prerelease: upstream v0.6.0 integration
+
+The pinned fork now follows official llama.cpp v0.6.0 with four attributed
+feature commits, preserving the Pascal dual-GPU MoE cache and validated
+CPU/CUDA optional quantization support. Legacy borrowed-embedding MTP exports
+require migration to self-contained exports.
+
+See [v0.4.0 release notes](doc/RELEASE_NOTES_v0.4.0.md) for the exact source,
+installation and validation limits. Objective populated 64k/128k retrieval
+and cached continuation passed as r1 screening. The final contemporary
+performance comparison is not complete: **no speedup is certified**.
+
 ```bash
 cd llama.cpp
 cmake -S . -B build-pascal-cuda -G Ninja \
@@ -233,6 +245,9 @@ In this fork's `llama-bench`, a slash keeps it a single configuration
 
 
 ## Upstream work
+
+For incremental updates, attribution and mandatory functional/performance gates,
+see [the upstream integration procedure](doc/UPSTREAM_INTEGRATION.md).
 
 - [llama.cpp / GGML](https://github.com/ggml-org/llama.cpp): inference engine,
   GGUF ecosystem, kernels, and multi-GPU support.
