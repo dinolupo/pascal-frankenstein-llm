@@ -385,6 +385,28 @@ Il candidato e stato ricompilato dal commit pulito `988518731`, versione
 incorporata `0.6.0-dev`, con toolchain/flag invariati. Nove CTest superati;
 22 test offline degli strumenti di misura superati.
 
+## Screening long-context sul rebuild e prerelease v0.4.0
+
+Il rebuild pulito `988518731` passa recupero oggettivo di tre codici distribuiti
+nel prompt, JSON non vincolato alle risposte, stop e prosecuzione cached:
+3.807 token in 16,68 s; 58.698 token sul preset vision 64k in 328,74 s;
+117.503 token sul preset testo 128k in 771,85 s. Input solo testo anche sul
+profilo vision. Una cold repetition per profilo: screening r1, non baseline
+long-context o certificazione generale di qualita.
+
+Primo tentativo: risposte 4k/64k corrette ma timeout di un probe GPU da 10 s,
+gate fallito. Replica seguente interrotta prima del risultato 128k; il terzo
+screening completo passa con probe VRAM/power bounded a 60 s, senza query
+clock/temperatura. 571 campioni, modi osservati tutti `1`, durata massima probe
+0,056 s; picchi VRAM 10.905/7.956 MiB, minimo MemAvailable 21.751.716 kB,
+massimo swap usato 2.129.192 kB. Nessuna cancellazione delle evidenze fallite.
+
+La prerelease del progetto v0.4.0 usa lo stack di quattro commit sul tag
+ufficiale v0.6.0, pin `988518731`. Il confronto ravvicinato finale fra originale,
+maintenance e candidato **non e stato eseguito**; nessuno speedup certificato.
+Installazione locale e INI restano invariati. Vedi le note v0.4.0 per migrazione
+MTP, limiti backend/architetture e procedura di installazione.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

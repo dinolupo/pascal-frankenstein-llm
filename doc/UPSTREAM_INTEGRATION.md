@@ -61,7 +61,8 @@ the previous published branch.
 
 On `pascal-v0.6.0-stack`, `4d0ac3bdb` contains the operational cache/overlap
 group and `7760081b1` contains the validated optional CPU/CUDA Pascal port.
-The parent pin is still the maintenance checkpoint, not a promoted release.
+The parent pin is now `988518731`, prepared for project v0.4.0 prerelease.
+This is a source pin, not a deployment or a completed speedup certification.
 
 The user selected CPU and CUDA Pascal coverage; preserve other upstream backend
 sources unchanged and document unverified shared HIP/MUSA code. Do not import
