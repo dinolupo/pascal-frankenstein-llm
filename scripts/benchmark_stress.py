@@ -28,10 +28,10 @@ TURNS_PROMPTS = [
 SYSTEM_PROMPT = "Sei un assistente AI specializzato in architetture hardware e sistemi distribuiti. Rispondi in modo tecnico e conciso."
 
 
-def get_vram_stats():
+def get_vram_stats(timeout=10):
     output = subprocess.check_output(
         ["nvidia-smi", "--query-gpu=index,name,memory.used,memory.total",
-         "--format=csv,noheader,nounits"], text=True, timeout=10,
+         "--format=csv,noheader,nounits"], text=True, timeout=timeout,
     )
     gpus = []
     for line in output.strip().splitlines():

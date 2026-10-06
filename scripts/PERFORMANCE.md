@@ -145,6 +145,13 @@ sincronizzazione per non lasciare query in volo al cambio modello. Il campo
 riuscite o copertura energetica durante quel load. La politica e verificata
 prima e dopo il load; durante tutte le misure torna la telemetria completa.
 Con la registrazione spenta il comportamento di campionamento resta invariato.
+Il monitor registra anche durata del probe GPU e timestamp di completamento:
+due secondi sono la pausa tra campioni, non una garanzia di cadenza esatta.
+I probe CLI conservano il timeout predefinito di 10 s. Per lo screening lungo
+il chiamante puo specificare `gpu_probe_timeout=60`; il primo screening a
+58.698 token aveva risposte corrette ma un probe in timeout, dunque il gate
+resta registrato come fallito. La replica con timeout esplicito non elimina
+quel fallimento; assenze/errori di telemetria continuano a fallire.
 
 ### Regressione padding MMQ
 
