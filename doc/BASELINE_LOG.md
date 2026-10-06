@@ -407,6 +407,16 @@ maintenance e candidato **non e stato eseguito**; nessuno speedup certificato.
 Installazione locale e INI restano invariati. Vedi le note v0.4.0 per migrazione
 MTP, limiti backend/architetture e procedura di installazione.
 
+Preparazione release: ricompilati tutti i quattro eseguibili, incluso
+`llama-cli` assente dal build precedente. Nove CTest e 23 test offline passano;
+archivio/checksum, manifest interno e installazione in HOME isolata verificati.
+Il server estratto passa aritmetica/EOG/prefisso su entrambi i preset e immagine
+rossa sul vision. Preferenza corrente `2` su entrambe le GPU, non modificata:
+questa replica e solo funzionale e non aggiunge evidenza di performance.
+Packager: verifica clean source e commit incorporato in tutti i binari,
+include licenze, documentazione e strumenti; rifiuta overwrite e versioni
+non valide. Il fork `pascal-v0.6.0-stack` e stato pubblicato prima del parent.
+
 # Baseline e obiettivi (fase WSL2 — storico)
 
 Registro iniziale delle misure effettuate in LM Studio su Windows. I valori

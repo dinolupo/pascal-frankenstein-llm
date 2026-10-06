@@ -45,6 +45,10 @@ GTX 1070 8 GB; CUDA Toolkit 12.9, driver 580.178.04.
 - Nine focused CTests covering sampling, Turbo quantization, MTP export
   contracts, reasoning budget, grammar, batch allocation, chat and JSON schema.
 - 23 offline measurement-tool tests and the dependency-light installer smoke.
+- Release archive extraction, outer checksum and internal manifest; isolated
+  installation and packaged real-model text/image checks. The latter were
+  functional-only: current power preference read 2, was not changed, and those
+  runs are not performance evidence.
 - Real numerical optional-quantization fixtures: 128 selected cases per GPU,
   no unsupported skips; 18 CPU round trips and six model configurations.
 - Synthetic Qwen35moe/Qwen4Exp CPU-reference agreement, serialization and
@@ -156,6 +160,9 @@ git clone --branch v0.4.0 --recurse-submodules \
   https://github.com/dinolupo/pascal-frankenstein-llm.git
 ```
 
-See [UPSTREAM_INTEGRATION.md](UPSTREAM_INTEGRATION.md) for attributed patch-stack
-updates, [BASELINE_LOG.md](BASELINE_LOG.md) for the experiment record, and
-[PERFORMANCE.md](../scripts/PERFORMANCE.md) for gate commands and thresholds.
+See [UPSTREAM_INTEGRATION.md](https://github.com/dinolupo/pascal-frankenstein-llm/blob/v0.4.0/doc/UPSTREAM_INTEGRATION.md)
+for attributed patch-stack updates,
+[BASELINE_LOG.md](https://github.com/dinolupo/pascal-frankenstein-llm/blob/v0.4.0/doc/BASELINE_LOG.md)
+for the experiment record, and
+[PERFORMANCE.md](https://github.com/dinolupo/pascal-frankenstein-llm/blob/v0.4.0/scripts/PERFORMANCE.md)
+for gate commands and thresholds.
