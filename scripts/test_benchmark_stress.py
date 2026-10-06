@@ -292,12 +292,10 @@ class BenchmarkTests(unittest.TestCase):
             output = Path(directory) / "memory.jsonl"
             stop, errors = threading.Event(), []
             with patch.object(gate, "get_vram_stats", return_value=[{"id": "0"}]) as vram, \
-                 patch.object(gate.subprocess, "check_output", return_value="GPU state") as state, \
                  patch.object(stop, "wait", side_effect=lambda timeout: stop.set()):
                 gate.monitor(stop, output, errors, gpu_probe_timeout=60)
             self.assertEqual(errors, [])
             vram.assert_called_once_with(timeout=60)
-            self.assertEqual(state.call_args.kwargs["timeout"], 60)
             sample = json.loads(output.read_text())
             self.assertGreaterEqual(sample["gpu_probe_elapsed_s"], 0)
             self.assertGreaterEqual(sample["gpu_sample_completed_at"], sample["time"])

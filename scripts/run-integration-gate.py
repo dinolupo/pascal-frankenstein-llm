@@ -51,10 +51,6 @@ def monitor(stop, output, errors, power_uuids=None, gpu_ready=None, gpu_lock=Non
                     if gpu_ready is None or gpu_ready.is_set():
                         probe_started = time.monotonic()
                         sample["gpus"] = get_vram_stats(timeout=gpu_probe_timeout)
-                        sample["gpu_state"] = subprocess.check_output(
-                            ["nvidia-smi", "--query-gpu=index,pstate,clocks.sm,clocks.mem,power.draw,temperature.gpu",
-                             "--format=csv,noheader,nounits"], text=True, timeout=gpu_probe_timeout,
-                        ).strip()
                         if power_uuids is not None:
                             sample["power_modes"] = read_power_modes()
                         sample["gpu_probe_elapsed_s"] = time.monotonic() - probe_started
